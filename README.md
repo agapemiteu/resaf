@@ -6,7 +6,7 @@ Resaf is a merchant-facing API for financially backed, time-limited reservations
 
 - A real PayPal Sandbox $2 authorization and void lifecycle has been verified with the CLI harness.
 - The API currently creates **provisional approval claims**, reads resources and owned claims, releases claims, and records events. It does **not** yet activate financially backed reservations or complete purchases.
-- PostgreSQL migration, seed data, and a Render Blueprint are prepared. A live database and deployment have not yet been verified.
+- The Render deployment responds at `https://resaf-api.onrender.com`; `/health` and the seeded product endpoint were verified against the live app. Authenticated reservation requests and payment flows still need live validation.
 
 ## Run locally
 
