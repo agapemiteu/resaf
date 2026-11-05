@@ -38,7 +38,7 @@ const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, 'http://localhost');
     if (request.method === 'GET' && url.pathname === '/health') return send(response, 200, { ok: true });
-    if (request.method === 'POST' && url.pathname === '/internal/expire') {
+    if (['GET', 'POST'].includes(request.method) && url.pathname === '/internal/expire') {
       const bearer = request.headers.authorization?.match(/^Bearer ([^\s]+)$/)?.[1];
       const secret = process.env.CRON_SECRET;
       if (!bearer || !secret || secret.startsWith('replace-') ||
@@ -46,7 +46,15 @@ const server = createServer(async (request, response) => {
             createHash('sha256').update(secret).digest())) {
         return send(response, 401, { error: 'UNAUTHORIZED' });
       }
+      if (request.method === 'GET') {
+        const result = await pool.query(`SELECT completed_at, source, result FROM maintenance_status WHERE name = 'expiration'`);
+        return send(response, 200, result.rows[0] ?? { status: 'NEVER_RUN' });
+      }
       const result = await runExpirationSweep();
+      await pool.query(`INSERT INTO maintenance_status (name, completed_at, source, result)
+        VALUES ('expiration', now(), $1, $2) ON CONFLICT (name) DO UPDATE
+        SET completed_at = excluded.completed_at, source = excluded.source, result = excluded.result`,
+        [request.headers['x-resaf-scheduler'] === 'cloudflare' ? 'cloudflare' : 'manual', JSON.stringify(result)]);
       return send(response, result.failed ? 503 : 200, result);
     }
     if (request.method === 'GET' && (url.pathname === '/paypal/return' || url.pathname === '/paypal/cancel')) {

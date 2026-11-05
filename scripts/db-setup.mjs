@@ -16,6 +16,8 @@ try {
     await client.query(`INSERT INTO schema_migrations (version) VALUES ('0001_initial')`);
   }
   await client.query(await readFile(new URL('../src/db/seed.sql', import.meta.url), 'utf8'));
+  await client.query(`CREATE TABLE IF NOT EXISTS maintenance_status (
+    name text PRIMARY KEY, completed_at timestamptz NOT NULL, source text NOT NULL, result jsonb NOT NULL)`);
   const result = await client.query(`SELECT r.id, r.title, r.status, p.commitment_amount, p.hold_duration_seconds
     FROM resources r JOIN reservation_policies p ON p.resource_id = r.id WHERE r.id = 'bag-001'`);
   await client.query('COMMIT');
