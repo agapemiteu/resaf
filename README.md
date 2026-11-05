@@ -26,7 +26,7 @@ The current API contract is [docs/openapi.yaml](docs/openapi.yaml). It is the so
 
 ## Render
 
-`render.yaml` defines a free Node web service and free Render Postgres database. Render injects the database's internal connection string. Supply PayPal Sandbox credentials and both demo keys as secret environment variables during Blueprint setup. The startup command applies the initial migration once, seeds the demo records, and starts the API. Free Render Postgres expires after 30 days; the demo needs a backup or paid database for longer retention.
+`render.yaml` defines a free Node web service, free Render Postgres database, and a one-minute cron job for expiration and authorization-void retries. Render injects the database's internal connection string. Supply PayPal Sandbox credentials to both the web service and cron job, and both demo keys to the web service. The startup command applies the initial migration once, seeds the demo records, and starts the API. Render cron jobs have a minimum $1 monthly charge. Free Render Postgres expires after 30 days; the demo needs a backup or paid database for longer retention.
 
 ## PayPal Sandbox lifecycle check
 
