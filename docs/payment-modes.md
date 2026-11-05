@@ -9,12 +9,10 @@ Refund percentages are integers in basis points: `10000` returns 100%, `2500` re
 
 The current merchant configuration is database-backed. Add a new policy version with `payment_mode = 'CAPTURE'` and explicit `purchase_refund_bps`, `release_refund_bps`, and `expiry_refund_bps`. The merchant policy API/editor remains to be built. No LLM can change these terms.
 
-## Saved payment setup
+## Integration boundary
 
-`node --env-file=.env.local scripts/paypal-saved-payment.mjs create` attempts a PayPal Wallet setup without making a purchase. After the buyer grants consent, `status` checks approval and `confirm` exchanges the setup token for a saved payment token. The harness stores tokens only in ignored `.local/saved-payment-setup.json` and never prints the payment token.
+The merchant or agent supplies its payment authorization flow. Resaf creates the commitment order, returns PayPal's required action when applicable, and verifies the resulting payment server-side before granting a reservation. Payment setup is outside the reservation API. The present demo uses PayPal-hosted approval; unattended agent payment is not yet demonstrated.
 
-The Sandbox app currently returns HTTP 403 for setup-token creation. General Save payment methods is checked in the dashboard, but PayPal Wallet saving also requires the applicable payment-method feature and billing-agreement/reference-transaction permissions. Do not treat unattended payments as implemented until the setup, token exchange, and subsequent payment have succeeded.
+The core sequence is: quote terms, collect and verify commitment, reserve, then settle according to the quoted policy. Scheduled policy versions let developers change commitments over time without changing existing reservations.
 
-Saved tokens must be bound to the merchant's trusted buyer identity and a persisted spending mandate before agents can use them. The current CLI feasibility harness does not implement that mandate or expose saved-token payments to agents.
-
-Sources: [PayPal Wallet setup](https://developer.paypal.com/api/payment-tokens/save-without-purchase/paypal), [account configuration](https://developer.paypal.com/api/orders-v2/save-with-purchase/paypal), [capture refunds](https://developer.paypal.com/api/payments/v2/captures-refund).
+Source: [PayPal capture refunds](https://developer.paypal.com/api/payments/v2/captures-refund).

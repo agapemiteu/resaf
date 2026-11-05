@@ -127,42 +127,6 @@ export async function voidAuthorization(authorizationId, reservationId) {
   return getAuthorization(authorizationId);
 }
 
-export async function createPaymentSetup({ setupId, returnUrl, cancelUrl }) {
-  return request('/v3/vault/setup-tokens', {
-    method: 'POST', requestId: operationId('setup', setupId),
-    body: { payment_source: { paypal: {
-      description: 'Resaf Sandbox reservation commitments',
-      usage_type: 'MERCHANT', customer_type: 'CONSUMER', usage_pattern: 'IMMEDIATE',
-      permit_multiple_payment_tokens: false,
-      experience_context: { return_url: returnUrl, cancel_url: cancelUrl,
-        shipping_preference: 'NO_SHIPPING', brand_name: 'Resaf Sandbox' },
-    } } },
-  });
-}
-
-export async function getPaymentSetup(setupTokenId) {
-  return request(`/v3/vault/setup-tokens/${encodeURIComponent(setupTokenId)}`);
-}
-
-export async function savePaymentToken(setupTokenId) {
-  const setup = await getPaymentSetup(setupTokenId);
-  if (setup.status !== 'APPROVED') throw new Error(`PayPal payment setup is ${setup.status}.`);
-  return request('/v3/vault/payment-tokens', {
-    method: 'POST', requestId: operationId('save-token', setupTokenId),
-    body: { payment_source: { token: { id: setupTokenId, type: 'SETUP_TOKEN' } } },
-  });
-}
-
-export async function createSavedPayment({ operationKey, vaultId, amount, currency }) {
-  return request('/v2/checkout/orders', {
-    method: 'POST', requestId: operationId('saved-capture', operationKey),
-    body: { intent: 'CAPTURE',
-      purchase_units: [{ reference_id: operationKey, amount: { currency_code: currency, value: amount } }],
-      payment_source: { paypal: { vault_id: vaultId } },
-    },
-  });
-}
-
 export async function getCapture(captureId) {
   return request(`/v2/payments/captures/${encodeURIComponent(captureId)}`);
 }
