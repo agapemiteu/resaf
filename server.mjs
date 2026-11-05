@@ -92,8 +92,18 @@ const server = createServer(async (request, response) => {
 
     const resourceMatch = url.pathname.match(/^\/api\/v1\/resources\/([a-zA-Z0-9-]+)$/);
     if (request.method === 'GET' && resourceMatch) {
-      const { rows } = await pool.query(`SELECT id, title, description, price, currency, quantity, status
-        FROM resources WHERE id = $1 AND merchant_id = $2`, [resourceMatch[1], merchantId]);
+      const { rows } = await pool.query(`SELECT i.id, i.title, i.description, i.price, i.currency, i.quantity,
+        CASE WHEN i.status = 'SOLD' THEN 'SOLD'
+          WHEN r.status = 'RESERVED' THEN 'RESERVED'
+          WHEN r.status = 'PENDING_COMMITMENT' THEN 'APPROVAL_PENDING'
+          ELSE i.status END AS status,
+        CASE WHEN r.status = 'RESERVED' THEN r.expires_at ELSE r.claim_expires_at END AS available_at
+        FROM resources i LEFT JOIN LATERAL (
+          SELECT status, expires_at, claim_expires_at FROM reservations
+          WHERE resource_id = i.id AND
+            ((status = 'RESERVED' AND expires_at > now()) OR
+             (status = 'PENDING_COMMITMENT' AND claim_expires_at > now())) LIMIT 1
+        ) r ON true WHERE i.id = $1 AND i.merchant_id = $2`, [resourceMatch[1], merchantId]);
       return send(response, rows.length ? 200 : 404, rows[0] ?? { error: 'RESOURCE_NOT_FOUND' });
     }
 

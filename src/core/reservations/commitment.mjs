@@ -79,6 +79,9 @@ export async function confirmCommitment(reservationId, buyerId, expectedOrderId)
     throw new ReservationError('ORDER_MISMATCH', 'PayPal returned an unexpected order.');
   }
   if (claim.status === 'RESERVED' && payment.status === 'AUTHORIZED') {
+    if (new Date(claim.expires_at) <= new Date()) {
+      throw new ReservationError('CLAIM_EXPIRED', 'Reservation has expired.');
+    }
     return { reservation_id: reservationId, status: 'RESERVED', expires_at: claim.expires_at,
       payment_status: 'AUTHORIZED' };
   }
@@ -108,7 +111,7 @@ export async function confirmCommitment(reservationId, buyerId, expectedOrderId)
     const locked = await client.query(`SELECT r.* FROM reservations r JOIN resources i ON i.id = r.resource_id
       WHERE r.id = $1 AND i.merchant_id = $2 FOR UPDATE OF r`, [reservationId, merchantId]);
     const current = locked.rows[0];
-    if (current?.status === 'RESERVED') {
+    if (current?.status === 'RESERVED' && new Date(current.expires_at) > new Date()) {
       activated = { expires_at: current.expires_at };
     } else if (current?.status === 'PENDING_COMMITMENT' && new Date(current.claim_expires_at) > new Date()) {
       const policy = await client.query(`SELECT hold_duration_seconds FROM reservation_policies WHERE id = $1`,
