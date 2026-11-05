@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: resaf-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: node scripts/db-setup.mjs && node server.mjs
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 24.16.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: resaf-db
+          property: connectionString
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: DEMO_AGENT_A_KEY
+        sync: false
+      - key: DEMO_AGENT_B_KEY
+        sync: false
+databases:
+  - name: resaf-db
+    plan: free

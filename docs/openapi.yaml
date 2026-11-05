@@ -1,0 +1,102 @@
+openapi: 3.1.0
+info:
+  title: Resaf reservation API
+  version: 0.1.0
+  description: Initial approval-claim API. PayPal commitment and purchase routes are pending.
+servers:
+  - url: https://resaf-api.onrender.com
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Demo key bound by the server to a seeded buyer identity.
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        message: { type: string }
+    Claim:
+      type: object
+      properties:
+        reservation_id: { type: string, format: uuid }
+        status: { type: string, enum: [PENDING_COMMITMENT] }
+        claim_expires_at: { type: string, format: date-time }
+        policy_version: { type: integer }
+        commitment:
+          type: object
+          properties:
+            amount: { type: string }
+            currency: { type: string }
+paths:
+  /health:
+    get:
+      security: []
+      responses:
+        '200': { description: Process is running }
+  /api/v1/resources/{id}:
+    get:
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Merchant resource }
+        '404': { description: Resource not found }
+  /api/v1/reservations:
+    post:
+      description: Request a short provisional claim. This is not an active reservation.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, minLength: 8, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resource_id]
+              properties:
+                resource_id: { type: string }
+      responses:
+        '201':
+          description: Approval claim created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Claim' }
+        '409': { description: Policy or inventory conflict }
+  /api/v1/reservations/{id}:
+    get:
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Owned reservation status }
+        '404': { description: Not found or not owned by buyer }
+  /api/v1/reservations/{id}/events:
+    get:
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Ordered reservation events }
+  /api/v1/reservations/{id}/release:
+    post:
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Claim released }

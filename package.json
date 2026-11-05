@@ -1,0 +1,19 @@
+{
+  "name": "resaf",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Financially backed reservation infrastructure for agentic commerce.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "paypal:smoke": "node --env-file=.env.local scripts/paypal-smoke.mjs",
+    "db:setup": "node --env-file=.env.local scripts/db-setup.mjs",
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1"
+  }
+}
