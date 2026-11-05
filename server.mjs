@@ -2,7 +2,8 @@ import { createServer } from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import pg from 'pg';
 import { requestApprovalClaim, releaseClaim, ReservationError } from './src/core/reservations/claims.ts';
-import { startCommitment, confirmCommitment, voidOutstanding } from './src/core/reservations/commitment.mjs';
+import { startCommitment, confirmCommitment, voidOutstanding, verifyCallback } from './src/core/reservations/commitment.mjs';
+import { runExpirationSweep } from './src/core/reservations/sweep.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const merchantId = 'merchant-001';
@@ -37,10 +38,47 @@ const server = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, 'http://localhost');
     if (request.method === 'GET' && url.pathname === '/health') return send(response, 200, { ok: true });
+    if (request.method === 'POST' && url.pathname === '/internal/expire') {
+      const bearer = request.headers.authorization?.match(/^Bearer ([^\s]+)$/)?.[1];
+      const secret = process.env.CRON_SECRET;
+      if (!bearer || !secret || secret.startsWith('replace-') ||
+          !timingSafeEqual(createHash('sha256').update(bearer).digest(),
+            createHash('sha256').update(secret).digest())) {
+        return send(response, 401, { error: 'UNAUTHORIZED' });
+      }
+      const result = await runExpirationSweep();
+      return send(response, result.failed ? 503 : 200, result);
+    }
     if (request.method === 'GET' && (url.pathname === '/paypal/return' || url.pathname === '/paypal/cancel')) {
       const approved = url.pathname === '/paypal/return';
-      response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      response.end(`<html><title>Resaf Sandbox</title><body style="font:18px system-ui;max-width:38rem;margin:5rem auto"><h1>${approved ? 'Returned from PayPal' : 'PayPal checkout canceled'}</h1><p>${approved ? 'Approval and authorization are not yet verified. Return to Resaf to check the order and activate the reservation.' : 'No reservation was activated.'}</p></body></html>`);
+      let status = 200;
+      let heading = approved ? 'Returned from PayPal' : 'PayPal checkout canceled';
+      let message = approved ? 'Approval and authorization are not yet verified.' : 'No reservation was activated.';
+      if (approved && url.searchParams.has('reservation_id')) {
+        const id = url.searchParams.get('reservation_id');
+        const buyerId = url.searchParams.get('buyer_id');
+        const signature = url.searchParams.get('sig');
+        const orderId = url.searchParams.get('token');
+        if (!/^[0-9a-f-]{36}$/i.test(id ?? '') || !/^buyer-[ab]$/.test(buyerId ?? '') ||
+            !verifyCallback(id, buyerId, signature) || !orderId) {
+          status = 400;
+          heading = 'Invalid PayPal return';
+          message = 'The reservation was not activated.';
+        } else {
+          try {
+            const result = await confirmCommitment(id, buyerId, orderId);
+            heading = 'Reservation active';
+            message = `PayPal authorization verified. Reservation expires at ${new Date(result.expires_at).toUTCString()}.`;
+          } catch (error) {
+            status = error instanceof ReservationError ? 409 : 502;
+            heading = 'Reservation not activated';
+            message = 'PayPal approval could not be confirmed in time. Check the reservation status before trying again.';
+            console.error('PayPal return confirmation failed:', error);
+          }
+        }
+      }
+      response.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      response.end(`<html><title>Resaf Sandbox</title><body style="font:18px system-ui;max-width:38rem;margin:5rem auto"><h1>${heading}</h1><p>${message}</p></body></html>`);
       return;
     }
 

@@ -1,9 +1,22 @@
 import pg from 'pg';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createCommitmentOrder, getOrder, authorizeCommitment, getAuthorization, voidAuthorization } from '../../integrations/paypal/client.mjs';
 import { ReservationError } from './claims.ts';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const merchantId = 'merchant-001';
+
+function callbackSignature(reservationId, buyerId) {
+  const secret = process.env.CALLBACK_SIGNING_SECRET;
+  if (!secret || secret.startsWith('replace-')) throw new Error('Callback signing secret is not configured.');
+  return createHmac('sha256', secret).update(`${reservationId}:${buyerId}`).digest('hex');
+}
+
+export function verifyCallback(reservationId, buyerId, signature) {
+  if (typeof signature !== 'string' || !/^[0-9a-f]{64}$/.test(signature)) return false;
+  const expected = Buffer.from(callbackSignature(reservationId, buyerId), 'hex');
+  return timingSafeEqual(expected, Buffer.from(signature, 'hex'));
+}
 
 async function ownedClaim(reservationId, buyerId) {
   const result = await pool.query(`SELECT r.* FROM reservations r JOIN resources i ON i.id = r.resource_id
@@ -40,9 +53,13 @@ export async function startCommitment(reservationId, buyerId, publicBaseUrl) {
     VALUES ($1, 'RESERVATION_AUTHORIZATION', $2, $3, 'ORDER_REQUESTED', $4)
     ON CONFLICT (idempotency_key) DO NOTHING`,
     [reservationId, claim.commitment_amount, claim.currency, `commit:${reservationId}`]);
+  const returnUrl = new URL('/paypal/return', publicBaseUrl);
+  returnUrl.searchParams.set('reservation_id', reservationId);
+  returnUrl.searchParams.set('buyer_id', buyerId);
+  returnUrl.searchParams.set('sig', callbackSignature(reservationId, buyerId));
   const order = await createCommitmentOrder({
     reservationId, amount: claim.commitment_amount, currency: claim.currency,
-    returnUrl: `${publicBaseUrl}/paypal/return`, cancelUrl: `${publicBaseUrl}/paypal/cancel`,
+    returnUrl: returnUrl.href, cancelUrl: `${publicBaseUrl}/paypal/cancel`,
   });
   await pool.query(`UPDATE payment_transactions SET provider_order_id = $2, status = 'APPROVAL_REQUIRED'
     WHERE idempotency_key = $1`, [`commit:${reservationId}`, order.orderId]);
@@ -52,12 +69,15 @@ export async function startCommitment(reservationId, buyerId, publicBaseUrl) {
     approval_url: order.approvalUrl, status: 'APPROVAL_REQUIRED' };
 }
 
-export async function confirmCommitment(reservationId, buyerId) {
+export async function confirmCommitment(reservationId, buyerId, expectedOrderId) {
   const claim = await ownedClaim(reservationId, buyerId);
   const paymentResult = await pool.query(`SELECT * FROM payment_transactions WHERE idempotency_key = $1`,
     [`commit:${reservationId}`]);
   const payment = paymentResult.rows[0];
   if (!payment?.provider_order_id) throw new ReservationError('NO_ORDER', 'Commitment order has not been created.');
+  if (expectedOrderId && expectedOrderId !== payment.provider_order_id) {
+    throw new ReservationError('ORDER_MISMATCH', 'PayPal returned an unexpected order.');
+  }
   if (claim.status === 'RESERVED' && payment.status === 'AUTHORIZED') {
     return { reservation_id: reservationId, status: 'RESERVED', expires_at: claim.expires_at,
       payment_status: 'AUTHORIZED' };

@@ -20,13 +20,15 @@ node --env-file=.env.local server.mjs
 
 `GET /health` confirms the process is running. `GET /api/v1/resources/bag-001` reads the seeded product. `POST /api/v1/reservations` requires a bearer demo key and an `Idempotency-Key` header; it returns a 90-second provisional claim and the policy's commitment quote. The two demo keys bind requests to two server-defined buyers. The caller cannot choose a buyer ID.
 
-After creating a claim, the same buyer calls `POST /api/v1/reservations/{id}/commitment`. The response contains PayPal's approval URL. After the human approves it, call `POST /api/v1/reservations/{id}/confirm` before the provisional claim expires. The server verifies the PayPal authorization and only then activates a ten-minute reservation. `POST /api/v1/reservations/{id}/release` ends the reservation and attempts to void the authorization. A pending void is reported separately from the reservation state.
+After creating a claim, the same buyer calls `POST /api/v1/reservations/{id}/commitment`. The response contains PayPal's approval URL. The PayPal return URL verifies the approved order and authorization before activating the ten-minute reservation. The buyer can also call `POST /api/v1/reservations/{id}/confirm` if the return is interrupted; both paths require the provisional claim to remain valid. `POST /api/v1/reservations/{id}/release` ends the reservation and attempts to void the authorization. A pending void is reported separately from the reservation state.
 
 The current API contract is [docs/openapi.yaml](docs/openapi.yaml). It is the source to import into Postman and APIMatic once the payment routes are complete. The sponsor decision is in [docs/sponsors.md](docs/sponsors.md).
 
 ## Render
 
-`render.yaml` defines a free Node web service, free Render Postgres database, and a one-minute cron job for expiration and authorization-void retries. Render injects the database's internal connection string. Supply PayPal Sandbox credentials to both the web service and cron job, and both demo keys to the web service. The startup command applies the initial migration once, seeds the demo records, and starts the API. Render cron jobs have a minimum $1 monthly charge. Free Render Postgres expires after 30 days; the demo needs a backup or paid database for longer retention.
+`render.yaml` defines a free Node web service and free Render Postgres database. Render injects the database's internal connection string. Supply PayPal Sandbox credentials, both demo keys, `CALLBACK_SIGNING_SECRET`, and `CRON_SECRET` to the web service. The startup command applies the initial migration once, seeds the demo records, and starts the API. Free Render Postgres expires after 30 days; the demo needs a backup or paid database for longer retention.
+
+`wrangler.toml` defines a free Cloudflare Worker that calls the authenticated `POST /internal/expire` endpoint every minute. This expires due claims and retries PayPal authorization voids independently of browser activity. Set the same `CRON_SECRET` as a Cloudflare Worker secret. The Worker does not receive PayPal or database credentials. The standalone `node scripts/expire.mjs` command can run the same sweep manually.
 
 ## PayPal Sandbox lifecycle check
 
