@@ -6,7 +6,7 @@ Resaf is a merchant-facing API for financially backed, time-limited reservations
 
 - A real PayPal Sandbox $2 authorization and void lifecycle has been verified with the CLI harness.
 - The API creates provisional approval claims and now includes PayPal commitment and confirmation routes. A full reservation requires a verified PayPal authorization. This new flow still needs a live buyer-approval test. Purchase checkout remains unimplemented.
-- The Render deployment responds at `https://resaf-api.onrender.com`. The seeded product, concurrent provisional claims, early release, and repeat cooldown were verified against the live PostgreSQL database. Payment-backed activation still needs implementation and live validation.
+- The Render deployment responds at `https://resaf-api.onrender.com`. The seeded product, concurrent provisional claims, early release, and repeat cooldown were verified against the live PostgreSQL database. Payment-backed activation is deployed and awaits a live buyer-approval test.
 
 ## Run locally
 
@@ -38,4 +38,4 @@ npm run paypal:smoke -- authorize <order-id>
 npm run paypal:smoke -- void <authorization-id>
 ```
 
-After `create`, approve the PayPal-provided URL using a Sandbox Personal buyer. The default `PAYPAL_RETURN_URL` points to example.com and is only a placeholder for this CLI check; the order status is verified by the next command. The app needs its own return route. The script records request IDs, provider IDs, and verified states in ignored `.local/paypal-smoke.jsonl`. Reuse a recorded `PayPal-Request-Id` for a retry after an uncertain network result.
+After `create`, approve the PayPal-provided URL using a Sandbox Personal buyer. The default `PAYPAL_RETURN_URL` points to example.com and is only a placeholder for this CLI check; the order status is verified by the next command. The deployed API has a separate `/paypal/return` route for its reservation flow. The script records request IDs, provider IDs, and verified states in ignored `.local/paypal-smoke.jsonl`. Reuse a recorded `PayPal-Request-Id` for a retry after an uncertain network result.
