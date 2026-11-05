@@ -76,7 +76,7 @@ const server = createServer(async (request, response) => {
           try {
             const result = await confirmCommitment(id, buyerId, orderId);
             heading = 'Reservation active';
-            message = `PayPal authorization verified. Reservation expires at ${new Date(result.expires_at).toUTCString()}.`;
+            message = `PayPal commitment verified. Reservation expires at ${new Date(result.expires_at).toUTCString()}.`;
           } catch (error) {
             status = error instanceof ReservationError ? 409 : 502;
             heading = 'Reservation not activated';
@@ -121,10 +121,13 @@ const server = createServer(async (request, response) => {
         merchantId, resourceId: body.resource_id, buyerId: actor.buyerId,
         agentId: actor.agentId, idempotencyKey: key,
       });
+      const policy = await pool.query(`SELECT payment_mode, purchase_refund_bps, release_refund_bps,
+        expiry_refund_bps, hold_duration_seconds FROM reservation_policies WHERE id = $1`, [claim.policy_id]);
       return send(response, 201, {
         reservation_id: claim.id, status: claim.status, claim_expires_at: claim.claim_expires_at,
         commitment: { amount: claim.commitment_amount, currency: claim.currency },
         policy_version: claim.policy_version,
+        terms: policy.rows[0],
       });
     }
 

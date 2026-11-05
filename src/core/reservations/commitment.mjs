@@ -2,6 +2,7 @@ import pg from 'pg';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { createCommitmentOrder, getOrder, authorizeCommitment, getAuthorization, voidAuthorization } from '../../integrations/paypal/client.mjs';
 import { ReservationError } from './claims.ts';
+import { confirmFee, settleFee } from './fees.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const merchantId = 'merchant-001';
@@ -19,7 +20,8 @@ export function verifyCallback(reservationId, buyerId, signature) {
 }
 
 async function ownedClaim(reservationId, buyerId) {
-  const result = await pool.query(`SELECT r.* FROM reservations r JOIN resources i ON i.id = r.resource_id
+  const result = await pool.query(`SELECT r.*, p.payment_mode FROM reservations r JOIN resources i ON i.id = r.resource_id
+    JOIN reservation_policies p ON p.id = r.policy_id
     WHERE r.id = $1 AND r.buyer_id = $2 AND i.merchant_id = $3`, [reservationId, buyerId, merchantId]);
   if (!result.rowCount) throw new ReservationError('NOT_FOUND', 'Reservation does not belong to this buyer.');
   return result.rows[0];
@@ -54,12 +56,15 @@ export async function startCommitment(reservationId, buyerId, publicBaseUrl) {
     ON CONFLICT (idempotency_key) DO NOTHING`,
     [reservationId, claim.commitment_amount, claim.currency, `commit:${reservationId}`]);
   const returnUrl = new URL('/paypal/return', publicBaseUrl);
+  await pool.query(`UPDATE payment_transactions SET type = $2 WHERE idempotency_key = $1`,
+    [`commit:${reservationId}`, claim.payment_mode === 'CAPTURE' ? 'COMMITMENT_FEE' : 'RESERVATION_AUTHORIZATION']);
   returnUrl.searchParams.set('reservation_id', reservationId);
   returnUrl.searchParams.set('buyer_id', buyerId);
   returnUrl.searchParams.set('sig', callbackSignature(reservationId, buyerId));
   const order = await createCommitmentOrder({
     reservationId, amount: claim.commitment_amount, currency: claim.currency,
     returnUrl: returnUrl.href, cancelUrl: `${publicBaseUrl}/paypal/cancel`,
+    intent: claim.payment_mode,
   });
   await pool.query(`UPDATE payment_transactions SET provider_order_id = $2, status = 'APPROVAL_REQUIRED'
     WHERE idempotency_key = $1`, [`commit:${reservationId}`, order.orderId]);
@@ -78,6 +83,7 @@ export async function confirmCommitment(reservationId, buyerId, expectedOrderId)
   if (expectedOrderId && expectedOrderId !== payment.provider_order_id) {
     throw new ReservationError('ORDER_MISMATCH', 'PayPal returned an unexpected order.');
   }
+  if (claim.payment_mode === 'CAPTURE') return confirmFee(claim, payment);
   if (claim.status === 'RESERVED' && payment.status === 'AUTHORIZED') {
     if (new Date(claim.expires_at) <= new Date()) {
       throw new ReservationError('CLAIM_EXPIRED', 'Reservation has expired.');
@@ -153,6 +159,7 @@ export async function voidOutstanding(reservationId) {
   const paymentResult = await pool.query(`SELECT * FROM payment_transactions WHERE idempotency_key = $1`,
     [`commit:${reservationId}`]);
   const payment = paymentResult.rows[0];
+  if (payment?.provider_capture_id) return settleFee(reservationId);
   if (!payment?.provider_authorization_id || payment.status === 'VOIDED') return payment?.status ?? null;
   await pool.query(`UPDATE payment_transactions SET status = 'VOID_PENDING' WHERE id = $1`, [payment.id]);
   try {

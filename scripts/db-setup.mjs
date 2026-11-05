@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import pg from 'pg';
 
 if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes('replace-with')) {
@@ -10,10 +10,14 @@ await client.connect();
 try {
   await client.query('BEGIN');
   await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (version text PRIMARY KEY)`);
-  const installed = await client.query(`SELECT version FROM schema_migrations WHERE version = '0001_initial'`);
-  if (!installed.rowCount) {
-    await client.query(await readFile(new URL('../src/db/migrations/0001_initial.sql', import.meta.url), 'utf8'));
-    await client.query(`INSERT INTO schema_migrations (version) VALUES ('0001_initial')`);
+  const directory = new URL('../src/db/migrations/', import.meta.url);
+  for (const file of (await readdir(directory)).filter((name) => name.endsWith('.sql')).sort()) {
+    const version = file.slice(0, -4);
+    const installed = await client.query(`SELECT version FROM schema_migrations WHERE version = $1`, [version]);
+    if (!installed.rowCount) {
+      await client.query(await readFile(new URL(file, directory), 'utf8'));
+      await client.query(`INSERT INTO schema_migrations (version) VALUES ($1)`, [version]);
+    }
   }
   await client.query(await readFile(new URL('../src/db/seed.sql', import.meta.url), 'utf8'));
   await client.query(`CREATE TABLE IF NOT EXISTS maintenance_status (
