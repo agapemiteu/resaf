@@ -40,7 +40,7 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET' && (url.pathname === '/paypal/return' || url.pathname === '/paypal/cancel')) {
       const approved = url.pathname === '/paypal/return';
       response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      response.end(`<html><title>Resaf Sandbox</title><body style="font:18px system-ui;max-width:38rem;margin:5rem auto"><h1>${approved ? 'PayPal approval received' : 'PayPal approval canceled'}</h1><p>${approved ? 'Return to Resaf to verify the authorization and activate the reservation.' : 'No reservation was activated.'}</p></body></html>`);
+      response.end(`<html><title>Resaf Sandbox</title><body style="font:18px system-ui;max-width:38rem;margin:5rem auto"><h1>${approved ? 'Returned from PayPal' : 'PayPal checkout canceled'}</h1><p>${approved ? 'Approval and authorization are not yet verified. Return to Resaf to check the order and activate the reservation.' : 'No reservation was activated.'}</p></body></html>`);
       return;
     }
 
