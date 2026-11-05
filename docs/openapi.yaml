@@ -100,3 +100,26 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         '200': { description: Claim released }
+        '202': { description: Claim released; PayPal void still pending }
+  /api/v1/reservations/{id}/commitment:
+    post:
+      description: Create a PayPal authorization order for an unexpired provisional claim.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: PayPal approval URL returned }
+        '409': { description: Claim expired or no longer eligible }
+  /api/v1/reservations/{id}/confirm:
+    post:
+      description: Verify PayPal buyer approval and authorization before activating the reservation.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: PayPal authorization verified and reservation activated }
+        '409': { description: Approval missing or claim ended }

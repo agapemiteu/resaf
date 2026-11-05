@@ -84,8 +84,16 @@ export async function createCommitmentOrder({ reservationId, amount, currency, r
   return { orderId: order.id, approvalUrl: url.href, status: order.status };
 }
 
+export async function getOrder(orderId) {
+  return request(`/v2/checkout/orders/${encodeURIComponent(orderId)}`);
+}
+
 export async function authorizeCommitment(orderId, reservationId) {
-  const order = await request(`/v2/checkout/orders/${encodeURIComponent(orderId)}`);
+  const order = await getOrder(orderId);
+  if (order.status === 'COMPLETED') {
+    const existingId = order.purchase_units?.flatMap((unit) => unit.payments?.authorizations ?? [])[0]?.id;
+    if (existingId) return { status: order.status, authorization: await getAuthorization(existingId) };
+  }
   if (order.status !== 'APPROVED') return { status: order.status, authorization: null };
   const result = await request(`/v2/checkout/orders/${encodeURIComponent(orderId)}/authorize`, {
     method: 'POST', body: {}, requestId: operationId('authorize', reservationId),
