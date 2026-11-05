@@ -8,8 +8,8 @@ The required combination is PayPal Sandbox and meaningful AI. Sponsor tools are 
 | Postman | Publish and exercise the merchant-facing reservation API. | Add a collection after routes and authentication are stable. |
 | APIMatic | Generate developer-facing SDK/docs from Resaf's OpenAPI contract and use its PayPal API context plugin. | Use after the API contract is stable; maintain one OpenAPI source. |
 | Channel3 | External product discovery for shopping agents. | Skip for the one-product merchant demo; merchant catalog is authoritative. |
-| AG Grid | Merchant analytics and dashboards. | Skip; a small event timeline explains the demo better. |
-| Bryntum | Visualize reservation windows, policy changes, and competing agents on a merchant timeline. | Useful for the demo UI after payment and expiration work. Its Scheduler is a UI component; server-side expiry still needs a background trigger. |
+| AG Grid | Interactive ledger of competing reservation attempts, policy versions, PayPal verification, and inventory outcomes. | Use in the demo after the payment flow works; make each row an auditable decision rather than a generic analytics dashboard. |
+| Bryntum | Visualize reservation windows and policy changes on a timeline. | Skip; Cloudflare handles the actual expiration trigger and AG Grid will cover the demo's event view. Bryntum Scheduler is a UI component, not a backend cron service. |
 | Elastic | Search and agent retrieval. | Skip; one product does not need a search cluster. |
 | Kernel | Browser sessions for agents. | Skip for the API-first MVP. Browser automation may later help discovery on merchants without an API, but payment approval stays with the human. |
 | Astropods | Hosted agent runtime. | Skip until agent deployment needs separate orchestration. |

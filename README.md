@@ -18,7 +18,7 @@ npm run db:setup
 node --env-file=.env.local server.mjs
 ```
 
-`GET /health` confirms the process is running. `GET /api/v1/resources/bag-001` reads the seeded product. `POST /api/v1/reservations` requires a bearer demo key and an `Idempotency-Key` header; it returns a 90-second provisional claim and the policy's commitment quote. The two demo keys bind requests to two server-defined buyers. The caller cannot choose a buyer ID.
+`GET /health` confirms the process is running. `GET /api/v1/resources/bag-001` reads the seeded product. `POST /api/v1/reservations` requires a bearer demo key and an `Idempotency-Key` header; it returns a five-minute, nonrenewable provisional claim and the policy's commitment quote. The two demo keys bind requests to two server-defined buyers. The caller cannot choose a buyer ID. An expired provisional claim does not trigger the repeat-hold cooldown because it never granted a financially backed reservation.
 
 After creating a claim, the same buyer calls `POST /api/v1/reservations/{id}/commitment`. The response contains PayPal's approval URL. The PayPal return URL verifies the approved order and authorization before activating the ten-minute reservation. The buyer can also call `POST /api/v1/reservations/{id}/confirm` if the return is interrupted; both paths require the provisional claim to remain valid. `POST /api/v1/reservations/{id}/release` ends the reservation and attempts to void the authorization. A pending void is reported separately from the reservation state.
 
