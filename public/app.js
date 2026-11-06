@@ -155,6 +155,8 @@ async function refresh() {
     if (business) $('business-agent-result').textContent = business.status === 'COMPLETED' ? `AI recommended ${business.decision.action}: ${business.decision.explanation} New quote: ${money(business.decision.amount)}.` : business.status === 'FAILED' ? 'AI evaluation unavailable. The previous quote remains in effect.' : 'The business agent is evaluating observed demand…';
     $('login').close(); $('login').hidden = true; $('signout').hidden = false; $('connection').textContent = '● Live';
     decisions = activity.decisions.filter(d => d.resource_id === RESOURCE_ID); renderDecisions();
+    const purchase = decisions.findLast(d=>d.action === 'PURCHASE_CAPTURE_CONFIRMED' && d.evidence?.event?.reservation_id);
+    if (purchase) await loadReceipt(purchase.evidence.event.reservation_id, purchase.evidence.event.buyer_id === 'buyer-b' ? 'b' : 'a');
     for (const name of ['a', 'b']) {
       const run = activity.runs.find(r => r.buyer_id === `buyer-${name}` && (r.objective.includes(RESOURCE_ID) || r.steps?.some(s=>s.arguments?.resource_id === RESOURCE_ID)));
       if (run) agents[name].run = run;
