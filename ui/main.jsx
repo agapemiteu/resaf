@@ -2,6 +2,7 @@ import React,{useState,useEffect,useRef} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Button,Modal,Badge} from './components/ui.jsx';
 import {selectRun,contenderRow} from '../public/agent-state.js';
+import {LiveProcess} from './components/live-process.jsx';
 
 const money=(value,currency='USD')=>new Intl.NumberFormat('en-US',{style:'currency',currency}).format(Number(value));
 const active=['QUEUED','RUNNING'];
@@ -22,7 +23,7 @@ function EvidenceGrid({rows,type='race',onSelect}) {
   useEffect(()=>{
     if(!ready||!container.current)return;
     grid.current=window.agGrid.createGrid(container.current,{
-      theme:window.agGrid.themeQuartz.withParams({fontFamily:'Inter,system-ui,sans-serif',fontSize:12,headerFontSize:10,borderColor:'#e7e8eb',accentColor:'#1f664b'}),
+      theme:window.agGrid.themeQuartz.withParams({fontFamily:'Inter,system-ui,sans-serif',fontSize:12,headerFontSize:10,borderColor:'#e7e8eb',accentColor:'#d52c2c'}),
       columnDefs:type==='race'?[{field:'actor',headerName:'CONTENDER',width:110},{field:'ownership',headerName:'ACCESS',width:175},{field:'outcome',headerName:'BACKEND RESULT',width:195},{field:'next',headerName:'NEXT ACTION',flex:1,minWidth:225}]:
         [{field:'actor',headerName:'ACTOR',width:110},{field:'action',headerName:'ACTION',flex:1,minWidth:210},{field:'outcome',headerName:'RESULT',flex:1,minWidth:220}],
       defaultColDef:{resizable:true,sortable:true},getRowId:p=>p.data.id,rowHeight:48,headerHeight:36,animateRows:true,
@@ -33,20 +34,13 @@ function EvidenceGrid({rows,type='race',onSelect}) {
   useEffect(()=>{grid.current?.setGridOption('rowData',rows);},[rows]);
   return ready?<div ref={container} className={`evidence-grid ${type==='race'?'race-grid':''}`}/>:<div className="table-fallback">{rows.map(row=><p key={row.id}><strong>{row.actor}</strong> · {row.ownership||row.action} · {row.outcome}</p>)}</div>;
 }
-function LiveProcess({agents,signedIn,connected,onInspect}){
-  return <aside className="process-panel" aria-label="Live agent execution"><div className="process-top"><span className="eyebrow">LIVE EXECUTION</span><Badge tone={connected?'good':'warning'}>{connected?'Connected':'Reconnecting'}</Badge></div>{['a','b'].map(name=>{
-    const run=agents[name].run,execution=run?.execution,working=active.includes(run?.status),steps=run?.steps||[];
-    const status=execution?.phase==='TOOL_CALL'?(labels[execution.tool]||execution.tool):execution?.phase==='MODEL_INFERENCE'?'Model choosing next action':run?.status==='AWAITING_APPROVAL'?'PayPal approval needed':run?.status==='WAITING_FOR_AVAILABILITY'?'Waiting for resource':run?.status==='POLICY_DENIED'?'Stopped by policy':run?.status==='FAILED'?'Stopped · business alerted':run?.status==='COMPLETED'?'Mission complete':signedIn?'Ready for a mission':'Sign in to run';
-    return <section className="process-agent" key={name}><div className="agent-name"><span className={`agent-avatar avatar-${name}`}>{name.toUpperCase()}</span><strong>Agent {name.toUpperCase()}</strong><span className={working?'live-dot pulse':'live-dot'}/></div><p className="agent-current" aria-live="polite">{status}</p><small>{execution?.model||steps.findLast(s=>s.model)?.model||'Real model · structured tools'}</small><ol>{steps.slice(-3).map((step,index)=><li key={`${steps.length}-${index}`}><span className="step-check">✓</span><div>{labels[step.tool]||step.tool}<small>{step.result?.error||step.result?.status||'Response recorded'}</small></div></li>)}</ol>{working&&<div className="inflight"><span className="live-dot pulse"/>{execution?.phase==='TOOL_CALL'?'Request in flight':'Awaiting model response'}</div>}</section>;
-  })}<Button variant="ghost" size="small" onClick={onInspect}>Inspect calls & outcomes ↗</Button><div className="process-api"><span className="eyebrow">USE THE SAME API</span><code>POST /api/v1/reservations</code><a href="/developers">Open API →</a></div></aside>;
-}
 function DeveloperPage(){
   const [response,setResponse]=useState(null),[busy,setBusy]=useState(false);
   const sample=`curl https://resaf-api.onrender.com/api/v1/reservations \\\n  -H "Authorization: Bearer $RESAF_BUYER_KEY" \\\n  -H "Idempotency-Key: your-unique-request-key" \\\n  -H "Content-Type: application/json" \\\n  -d '{"resource_id":"YOUR_RESOURCE_ID"}'`;
   return <><header className="site-header"><a className="wordmark" href="/">resaf<span>developer sandbox</span></a><a className="nav-api" href="/">← Live demo</a></header><main className="developer-page"><p className="eyebrow">RESAF API · PAYPAL SANDBOX</p><h1>Try the infrastructure.</h1><p className="subtle">Discover → commit → reserve → settle.</p><section className="api-live-card"><div className="api-endpoint"><Badge tone="good">GET</Badge><code>/api/v1/resources/demo-resource-001</code></div><Button disabled={busy} onClick={async()=>{setBusy(true);try{const started=performance.now();const r=await fetch('/api/v1/resources/demo-resource-001',{signal:AbortSignal.timeout(15000)});const data=await r.json();setResponse({http:r.status,elapsed_ms:Math.round(performance.now()-started),body:data});}catch(error){setResponse({error:error.message});}finally{setBusy(false);}}}>{busy?'Requesting…':'Send live request →'}</Button>{response&&<pre aria-live="polite">{JSON.stringify(response,null,2)}</pre>}</section><section className="api-live-card"><h2>Request a commitment quote</h2><pre>{sample}</pre><p className="fine-print">Use your server-issued buyer key. No payment is captured by this request. The response provides accepted commitment and refund terms.</p></section><div className="api-downloads"><a href="/openapi.yaml">OpenAPI contract ↗</a><a href="/postman.json">Postman collection ↗</a><a href="https://github.com/agapemiteu/resaf" target="_blank" rel="noopener">Source repository ↗</a></div><section className="api-live-card"><h2>Continue the flow</h2>{[['POST','/api/v1/reservations/{id}/commitment','PayPal approval URL'],['POST','/api/v1/reservations/{id}/confirm','Verify payment; activate hold'],['POST','/api/v1/reservations/{id}/release','Release; apply accepted refund'],['POST','/api/v1/reservations/{id}/purchase','Separate final checkout'],['GET','/api/v1/reservations/{id}/receipt','Verified purchase confirmation']].map(([verb,path,result])=><div className="api-route" key={path}><code>{verb} {path}</code><span>{result}</span></div>)}</section><p className="fine-print">Public discovery works without a key. Buyer actions require scoped credentials. Merchant configuration uses a separate merchant key. The controlled demo signs in with MERCHANT_API_KEY from local setup.</p></main></>;
 }
 function App(){
-  const [connected,setConnected]=useState(false);
+  const [connected,setConnected]=useState(null),[refreshError,setRefreshError]=useState('');
   const [resourceId,setResourceId]=useState(initialResource),[resource,setResource]=useState(null),[policy,setPolicy]=useState(null);
   const [agents,setAgents]=useState({a:{},b:{}}),[activity,setActivity]=useState({decisions:[],alerts:[]}),[signedIn,setSignedIn]=useState(false);
   const [modal,setModal]=useState(null),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[goal,setGoal]=useState(defaultGoal);
@@ -56,7 +50,7 @@ function App(){
   const rows=['a','b'].map(name=>contenderRow(name,agents[name].run,agents[name].reservation));
   const holder=['a','b'].find(n=>['PENDING_COMMITMENT','RESERVED','PURCHASE_PENDING','PURCHASED'].includes(agents[n].reservation?.status));
   const owner=holder&&agents[holder],reservation=owner?.reservation;
-  const running=['a','b'].some(n=>active.includes(agents[n].run?.status));
+  const running=signedIn&&['a','b'].some(n=>active.includes(agents[n].run?.status));
   const allAlerts=(activity.alerts||[]).filter(a=>a.status==='OPEN');
   const alerts=allAlerts.filter(a=>a.resource_id===resourceId);
   const waiting=['a','b'].filter(n=>agents[n].run?.status==='WAITING_FOR_AVAILABILITY');
@@ -65,11 +59,11 @@ function App(){
     if(refreshing.current)return;refreshing.current=true;const selected=focus.current;
     try{
       const [item,terms]=await Promise.all([api(`/api/v1/resources/${selected}`),api(`/api/v1/resources/${selected}/policy`)]);
-      if(focus.current!==selected)return;setResource(item);setPolicy(terms);setConnected(true);setNotice(previous=>previous==='Failed to fetch'||previous.startsWith('The server is taking longer')?'':previous);
-      if(authChecked.current&&!signedRef.current)return;
+      if(focus.current!==selected)return;setResource(item);setPolicy(terms);
+      if(authChecked.current&&!signedRef.current){setConnected(true);setRefreshError('');return;}
       let feed;
       try{feed=await api('/api/v1/merchant/activity');authChecked.current=true;}
-      catch(error){if(error.status===401){setSignedIn(false);signedRef.current=false;authChecked.current=true;return;}throw error;}
+      catch(error){if(error.status===401){setSignedIn(false);signedRef.current=false;authChecked.current=true;setConnected(true);setRefreshError('');return;}throw error;}
       if(focus.current!==selected)return;setSignedIn(true);signedRef.current=true;setActivity(feed);
       const next={a:{},b:{}};
       for(const name of ['a','b']){
@@ -80,13 +74,13 @@ function App(){
         const claim=id?await api(`/api/v1/reservations/${id}`,{buyer:name}):null;
         next[name]={run,reservation:claim};pinned.current[name]=run;
       }
-      if(focus.current!==selected)return;setAgents(next);
+      if(focus.current!==selected)return;setAgents(next);setConnected(true);setRefreshError('');
       const purchase=feed.decisions.findLast(d=>d.resource_id===selected&&d.action==='PURCHASE_CAPTURE_CONFIRMED'&&d.evidence?.event?.reservation_id);
       if(purchase){
         const id=purchase.evidence.event.reservation_id;
         if(receiptRef.current!==id){const data=await api(`/api/v1/reservations/${id}/receipt`,{buyer:purchase.evidence.event.buyer_id==='buyer-b'?'b':'a'});if(focus.current===selected){setReceipt(data);receiptRef.current=id;}}
       }
-    }catch(error){setConnected(false);setNotice(error.name==='TimeoutError'?'The server is taking longer than expected. The next refresh will check the recorded outcome.':error.message);}
+    }catch(error){setConnected(false);setRefreshError(error.name==='TimeoutError'?'The server is taking longer than expected. The next refresh will check the recorded outcome.':error.message);}
     finally{refreshing.current=false;}
   }
   useEffect(()=>{focus.current=resourceId;localStorage.setItem('resaf-resource',resourceId);refresh();const interval=setInterval(refresh,1800);return()=>clearInterval(interval);},[resourceId]);
@@ -121,8 +115,8 @@ function App(){
   const canRace=!['PENDING_COMMITMENT','RESERVED','PURCHASE_PENDING'].includes(state)&&!['APPROVAL_PENDING','RESERVED','PURCHASE_PENDING'].includes(resource?.status);
 
   return <><header className="site-header"><a href="/" className="wordmark">resaf<span>reserve + safe</span></a><div className="header-actions"><a className="nav-api" href="/developers">API</a><Badge>PayPal Sandbox</Badge><Button variant="ghost" size="small" onClick={()=>signedIn?setModal('business'):setModal('login')}>{alerts.length?'Business · needs attention':signedIn?'Business':'Sign in'}</Button></div></header>
-    <main><section className="intro"><p className="eyebrow">FAIR ACCESS FOR AGENTIC COMMERCE</p><h1>Reserve. Commit. Complete.</h1><p className="scope-line">Reservation API for parking, rooms, tables, and scarce inventory.</p></section>
-      {notice&&<div className="notice" role="alert">{notice}<Button variant="ghost" size="small" onClick={()=>setNotice('')}>Dismiss</Button></div>}
+    <main><section className="intro"><p className="eyebrow">FAIR ACCESS FOR AGENTIC COMMERCE</p><h1>Reserve. <span className="brand-accent">Commit.</span> Complete.</h1><p className="scope-line">Reservation API for parking, rooms, tables, and scarce inventory.</p></section>
+      {(notice||refreshError)&&<div className="notice" role="alert">{notice||refreshError}<Button variant="ghost" size="small" onClick={()=>{setNotice('');setRefreshError('');}}>Dismiss</Button></div>}
       <div className="simulation-layout"><div className="flow-column"><nav className="flow-progress" aria-label="Demo progression"><span>01 Business terms</span><span>02 Agent competition</span><span>03 PayPal & settlement</span></nav><section className="main-card" aria-label="Live fair-access demonstration"><div className="resource-row"><img src="/parking-thumbnail.png" alt="Illustration of a parking space" width="64" height="64"/><div><p className="eyebrow">EXAMPLE MERCHANT RESOURCE</p><h2>{resource?.title||'Parking space P-01'}</h2><p className="subtle">{resource?money(resource.price):'…'} final booking · one unit</p></div><Badge tone={resource?.status==='AVAILABLE'?'good':'neutral'}>{resource?.status?.replaceAll('_',' ')||'Connecting'}</Badge></div>
         <div className="compact-terms"><span><strong>{policy?money(policy.commitment_amount):'…'}</strong> commitment</span><span>{policy?.hold_duration_seconds/60||10} min hold</span><span>{(policy?.purchase_refund_bps??10000)/100}% of commitment back after purchase</span></div>
         <div className="outcome" aria-live="polite"><div className="status-line"><span className={running?'live-dot pulse':'live-dot'}/>{running?'Live AI actions':state==='PURCHASED'||resource?.status==='SOLD'?'Verified outcome':'Live Sandbox scenario'}{waiting.length>0&&<span className="waiting-summary">{waiting.length} competing agent waiting</span>}</div><h3>{title}</h3><p>{description}</p>{Object.values(agents).some(a=>a.run?.steps?.length>0)&&<p className="latest-moves">{['a','b'].filter(n=>agents[n].run?.steps?.length).map(n=>`Agent ${n.toUpperCase()}: ${labels[agents[n].run.steps.at(-1).tool]||agents[n].run.steps.at(-1).tool}`).join(' / ')}</p>}
@@ -130,7 +124,7 @@ function App(){
           {receipt&&<Button variant="outline" onClick={()=>setModal('receipt')}>View confirmation</Button>}{state==='RESERVED'&&<Button variant="ghost" onClick={()=>perform(release)}>Release & apply refund</Button>}</div>
           {policy&&<p className="fine-print">Commitment refunds: {policy.release_refund_bps/100}% on early release · {policy.expiry_refund_bps/100}% on expiry. PayPal approval is required for each demo checkout.</p>}
         </div><div className="card-links"><Button variant="ghost" onClick={()=>setModal('race')}>Race details <span>{Object.values(agents).filter(a=>a.run).length||''}</span></Button><Button variant="ghost" onClick={()=>setModal('cases')}>Test failures</Button><Button variant="ghost" onClick={()=>setModal('setup')}>Setup</Button></div>
-      </section><p className="principle">Information is free. Scarcity isn’t.</p></div><LiveProcess agents={agents} signedIn={signedIn} connected={connected} onInspect={()=>setModal('race')}/></div><footer><button onClick={()=>setModal('why')}>Why this matters</button><a href="/openapi.yaml" target="_blank" rel="noopener">Developer API ↗</a><span>PayPal · Render · AG Grid</span></footer>
+      </section><p className="principle">Information is free. Scarcity isn’t.</p></div><LiveProcess agents={agents} signedIn={signedIn} connected={connected} onInspect={()=>setModal('race')} onRefresh={refresh} onIssue={()=>setModal('business')} labels={labels}/></div><footer><button onClick={()=>setModal('why')}>Why this matters</button><a href="/openapi.yaml" target="_blank" rel="noopener">Developer API ↗</a><span>PayPal · Render · AG Grid</span></footer>
     </main>
     <Modal open={modal==='setup'} onOpenChange={open=>!open&&setModal(null)} title="1. The business invokes Resaf" description="Terms for the next run."><form onSubmit={event=>{event.preventDefault();const data=new FormData(event.currentTarget);const terms={commitment_amount:Number(data.get('fee')).toFixed(2),hold_duration_seconds:Number(data.get('minutes'))*60,purchase_refund_bps:Number(data.get('refund'))*100};setModal(null);perform(()=>race(terms));}}><div className="two-fields"><label>Commitment fee $<input name="fee" type="number" min="1" max="5" step="0.01" defaultValue={policy?.commitment_amount||'2.00'} required/></label><label>Fixed hold (minutes)<input name="minutes" type="number" min="1" max="60" defaultValue={(policy?.hold_duration_seconds||600)/60} required/></label></div><label>Commitment returned after purchase (%)<input name="refund" type="number" min="0" max="100" step="1" defaultValue={(policy?.purchase_refund_bps??10000)/100} required/></label><Button type="submit">Run</Button></form></Modal>
     <Modal open={modal==='login'} onOpenChange={open=>!open&&setModal(null)} title="Open the live Sandbox" description="Sign in once to control the two demonstration buyers. No credentials are shared with the AI."><form onSubmit={async event=>{event.preventDefault();const key=new FormData(event.currentTarget).get('key');setBusy(true);try{await api('/api/demo/session',{method:'POST',body:JSON.stringify({key})});signedRef.current=true;setSignedIn(true);setModal(null);await refresh();const next=pendingAction.current;pendingAction.current=null;if(next)await next();}catch(error){setNotice(error.message);}finally{setBusy(false);}}}><label>Merchant key<input name="key" type="password" autoComplete="off" required placeholder="MERCHANT_API_KEY from .env.local"/></label><Button type="submit" disabled={busy}>{busy?'Opening…':'Continue'}</Button></form></Modal>
