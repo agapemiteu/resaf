@@ -37,9 +37,10 @@ async function inTransaction<T>(work: (client: pg.PoolClient) => Promise<T>): Pr
 async function expireForResource(client: pg.PoolClient, resourceId: string) {
   const expired = await client.query(`
     UPDATE reservations SET status = 'EXPIRED', ended_at = now()
-    WHERE resource_id = $1 AND status IN ('PENDING_COMMITMENT', 'RESERVED')
+    WHERE resource_id = $1 AND status IN ('PENDING_COMMITMENT', 'RESERVED', 'PURCHASE_PENDING')
       AND ((status = 'PENDING_COMMITMENT' AND claim_expires_at <= now())
-        OR (status = 'RESERVED' AND expires_at <= now()))
+        OR (status = 'RESERVED' AND expires_at <= now())
+        OR (status = 'PURCHASE_PENDING' AND purchase_expires_at <= now()))
     RETURNING id, status`, [resourceId]);
   for (const row of expired.rows) {
     await client.query(`INSERT INTO reservation_events (reservation_id, event_type)
@@ -144,7 +145,8 @@ export async function expireDueClaims(limit = 100) {
     const expired = await client.query(`WITH due AS (
       SELECT id FROM reservations WHERE
         (status = 'PENDING_COMMITMENT' AND claim_expires_at <= now()) OR
-        (status = 'RESERVED' AND expires_at <= now())
+        (status = 'RESERVED' AND expires_at <= now()) OR
+        (status = 'PURCHASE_PENDING' AND purchase_expires_at <= now())
       ORDER BY claim_expires_at LIMIT $1 FOR UPDATE SKIP LOCKED
     ) UPDATE reservations r SET status = 'EXPIRED', ended_at = now()
       FROM due WHERE r.id = due.id RETURNING r.id`, [limit]);

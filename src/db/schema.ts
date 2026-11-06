@@ -1,4 +1,4 @@
-import { index, integer, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 const time = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
@@ -31,6 +31,8 @@ export const policies = pgTable('reservation_policies', {
   purchaseRefundBps: integer('purchase_refund_bps').notNull().default(10000),
   releaseRefundBps: integer('release_refund_bps').notNull().default(10000),
   expiryRefundBps: integer('expiry_refund_bps').notNull().default(10000),
+  automation: jsonb('automation'),
+  changeSource: text('change_source').notNull().default('merchant'),
   currency: text('currency').notNull(),
   holdDurationSeconds: integer('hold_duration_seconds').notNull(),
   approvalClaimSeconds: integer('approval_claim_seconds').notNull(),
@@ -64,6 +66,7 @@ export const reservations = pgTable('reservations', {
   claimExpiresAt: timestamp('claim_expires_at', { withTimezone: true }).notNull(),
   activatedAt: timestamp('activated_at', { withTimezone: true }),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
+  purchaseExpiresAt: timestamp('purchase_expires_at', { withTimezone: true }),
   endedAt: timestamp('ended_at', { withTimezone: true }),
 }, (t) => [
   uniqueIndex('one_live_claim_per_resource_idx').on(t.resourceId)

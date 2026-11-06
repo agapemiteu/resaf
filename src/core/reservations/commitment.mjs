@@ -7,7 +7,7 @@ import { confirmFee, settleFee } from './fees.mjs';
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const merchantId = 'merchant-001';
 
-function callbackSignature(reservationId, buyerId) {
+export function callbackSignature(reservationId, buyerId) {
   const secret = process.env.CALLBACK_SIGNING_SECRET;
   if (!secret || secret.startsWith('replace-')) throw new Error('Callback signing secret is not configured.');
   return createHmac('sha256', secret).update(`${reservationId}:${buyerId}`).digest('hex');

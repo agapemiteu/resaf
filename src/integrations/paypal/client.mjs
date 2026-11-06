@@ -65,13 +65,13 @@ async function request(path, { method = 'GET', body, requestId } = {}) {
   return data;
 }
 
-export async function createCommitmentOrder({ reservationId, amount, currency, returnUrl, cancelUrl, intent = 'AUTHORIZE' }) {
+export async function createCommitmentOrder({ reservationId, amount, currency, returnUrl, cancelUrl, intent = 'AUTHORIZE', operation = 'commit' }) {
   if (!['AUTHORIZE', 'CAPTURE'].includes(intent)) throw new Error('Invalid payment intent.');
   const order = await request('/v2/checkout/orders', {
-    method: 'POST', requestId: operationId('commit', reservationId),
+    method: 'POST', requestId: operationId(operation, reservationId),
     body: {
       intent,
-      purchase_units: [{ reference_id: reservationId, description: 'Resaf reservation commitment',
+      purchase_units: [{ reference_id: reservationId, description: operation === 'purchase' ? 'Resaf merchant purchase' : 'Resaf reservation commitment',
         amount: { currency_code: currency, value: amount } }],
       payment_source: { paypal: { experience_context: { return_url: returnUrl, cancel_url: cancelUrl } } },
     },

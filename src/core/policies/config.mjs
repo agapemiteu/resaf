@@ -1,11 +1,12 @@
 import pg from 'pg';
 import { createHash, randomUUID } from 'node:crypto';
 import { ReservationError } from '../reservations/claims.ts';
+import { validateAutomation, nextCommitment, moneyCents } from './automation.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 3 });
 const fields = ['commitment_amount', 'currency', 'payment_mode', 'hold_duration_seconds',
   'approval_claim_seconds', 'max_active_holds_per_buyer', 'repeat_cooldown_seconds',
-  'purchase_refund_bps', 'release_refund_bps', 'expiry_refund_bps', 'effective_at'];
+  'purchase_refund_bps', 'release_refund_bps', 'expiry_refund_bps', 'effective_at', 'automation'];
 
 export function validatePolicy(body) {
   const invalid = (message) => { throw new ReservationError('INVALID_POLICY', message); };
@@ -33,6 +34,10 @@ export function validatePolicy(body) {
       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/.test(body.effective_at) ||
       !Number.isFinite(Date.parse(body.effective_at)))) invalid('effective_at must be a timestamp with a timezone.');
   policy.effective_at = body.effective_at ? new Date(body.effective_at).toISOString() : null;
+  try { policy.automation = validateAutomation(body.automation); }
+  catch (error) { invalid(error.message); }
+  if (policy.automation && (moneyCents(policy.commitment_amount) < moneyCents(policy.automation.min_amount) ||
+      moneyCents(policy.commitment_amount) > moneyCents(policy.automation.max_amount))) invalid('Commitment must be inside automation bounds.');
   return policy;
 }
 
@@ -42,7 +47,7 @@ export async function currentPolicy(merchantId, resourceId) {
   return result.rows[0] ?? null;
 }
 
-export async function createPolicy(merchantId, resourceId, body, requestKey) {
+export async function createPolicy(merchantId, resourceId, body, requestKey, expectedPolicyId) {
   const policy = validatePolicy(body);
   const hash = createHash('sha256').update(JSON.stringify(policy)).digest('hex');
   const key = `policy:${resourceId}:${requestKey}`;
@@ -52,6 +57,11 @@ export async function createPolicy(merchantId, resourceId, body, requestKey) {
     const resource = await client.query(`SELECT currency FROM resources WHERE id = $1 AND merchant_id = $2 FOR UPDATE`, [resourceId, merchantId]);
     if (!resource.rowCount) throw new ReservationError('RESOURCE_NOT_FOUND', 'Resource does not belong to this merchant.');
     if (resource.rows[0].currency !== policy.currency) throw new ReservationError('INVALID_POLICY', 'Policy currency must match the resource.');
+    if (expectedPolicyId) {
+      const current = await client.query(`SELECT id FROM reservation_policies WHERE resource_id = $1
+        AND effective_at <= now() ORDER BY effective_at DESC, version DESC LIMIT 1`, [resourceId]);
+      if (current.rows[0]?.id !== expectedPolicyId) throw new ReservationError('POLICY_CHANGED', 'Policy changed during evaluation.');
+    }
     const previous = await client.query(`SELECT * FROM idempotency_records WHERE merchant_id = $1 AND request_key = $2`, [merchantId, key]);
     if (previous.rowCount) {
       if (previous.rows[0].request_hash !== hash) throw new ReservationError('IDEMPOTENCY_CONFLICT', 'Key was already used with different policy terms.');
@@ -63,15 +73,39 @@ export async function createPolicy(merchantId, resourceId, body, requestKey) {
     const result = await client.query(`INSERT INTO reservation_policies
       (id, merchant_id, resource_id, version, commitment_amount, currency, payment_mode,
        hold_duration_seconds, approval_claim_seconds, max_active_holds_per_buyer, repeat_cooldown_seconds,
-       purchase_refund_bps, release_refund_bps, expiry_refund_bps, effective_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,COALESCE($15::timestamptz,now())) RETURNING *`,
+       purchase_refund_bps, release_refund_bps, expiry_refund_bps, effective_at, automation, change_source)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,COALESCE($15::timestamptz,now()),$16,$17) RETURNING *`,
       [randomUUID(), merchantId, resourceId, version.rows[0].version, policy.commitment_amount, policy.currency,
         policy.payment_mode, policy.hold_duration_seconds, policy.approval_claim_seconds, policy.max_active_holds_per_buyer,
-        policy.repeat_cooldown_seconds, policy.purchase_refund_bps, policy.release_refund_bps, policy.expiry_refund_bps, policy.effective_at]);
+        policy.repeat_cooldown_seconds, policy.purchase_refund_bps, policy.release_refund_bps, policy.expiry_refund_bps,
+        policy.effective_at, policy.automation ? JSON.stringify(policy.automation) : null, expectedPolicyId ? 'automation' : 'merchant']);
     await client.query(`INSERT INTO idempotency_records (merchant_id, request_key, request_hash, response_reference)
       VALUES ($1,$2,$3,$4)`, [merchantId, key, hash, result.rows[0].id]);
     await client.query('COMMIT');
     return result.rows[0];
   } catch (error) { await client.query('ROLLBACK'); throw error; }
   finally { client.release(); }
+}
+
+export async function evaluatePolicies() {
+  const policies = await pool.query(`SELECT * FROM (SELECT DISTINCT ON (p.resource_id) p.*
+    FROM reservation_policies p JOIN resources r ON r.id = p.resource_id
+    WHERE p.effective_at <= now() AND r.status <> 'SOLD'
+    ORDER BY p.resource_id, p.effective_at DESC, p.version DESC) current
+    WHERE automation IS NOT NULL AND created_at <= now() - ((automation->>'cooldown_seconds')::int * interval '1 second') LIMIT 50`);
+  let changed = 0;
+  for (const policy of policies.rows) {
+    const demand = await pool.query(`SELECT count(*)::int AS count FROM reservations
+      WHERE resource_id = $1 AND activated_at >= now() - ($2::int * interval '1 second')`,
+      [policy.resource_id, policy.automation.window_seconds]);
+    const amount = nextCommitment(policy, demand.rows[0].count);
+    if (amount === policy.commitment_amount) continue;
+    const input = Object.fromEntries(fields.filter(k => k !== 'effective_at').map(k => [k, policy[k]]));
+    input.commitment_amount = amount;
+    try {
+      await createPolicy(policy.merchant_id, policy.resource_id, input, `auto:${policy.id}`, policy.id);
+      changed++;
+    } catch (error) { if (error.code !== 'POLICY_CHANGED') throw error; }
+  }
+  return changed;
 }
