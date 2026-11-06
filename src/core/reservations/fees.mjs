@@ -63,6 +63,8 @@ export async function confirmFee(claim, payment) {
       await client.query(`INSERT INTO reservation_events (reservation_id, event_type, event_payload)
         VALUES ($1, $2, $3)`, [claim.id, active ? 'COMMITMENT_CAPTURE_CONFIRMED' : 'CAPTURE_REQUIRES_REFUND',
         JSON.stringify({ capture_id: captured.id, amount: captured.amount })]);
+      if (active) await client.query(`INSERT INTO reservation_events (reservation_id, event_type)
+        VALUES ($1, 'RESERVATION_ACTIVATED')`, [claim.id]);
     }
     await client.query('COMMIT');
   } catch (error) {

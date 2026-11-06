@@ -5,6 +5,7 @@ Resaf is a merchant-facing API for financially backed, time-limited reservations
 ## Current status
 
 - A real PayPal Sandbox $2 authorization and void lifecycle has been verified with the CLI harness.
+- The captured-fee flow has also passed a live Sandbox test: $2 captured, reservation activated, early release confirmed, $1 refunded, and repeated release produced no duplicate refund record. Merchant policy version 3 now selects this fee mode. See [payment modes](docs/payment-modes.md).
 - The live API has activated a reservation after verifying a real PayPal Sandbox $2 authorization. A competing buyer was rejected while it was active. Purchase checkout remains unimplemented.
 - The Render deployment responds at `https://resaf-api.onrender.com`. Live PostgreSQL claim concurrency and PayPal activation have been verified. A Cloudflare scheduled run automatically expired the active reservation and voided its PayPal authorization; inventory became available and the former buyer's repeat attempt was rejected by cooldown. Cleanup runs are recorded in PostgreSQL.
 
