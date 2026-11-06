@@ -33,7 +33,7 @@ export async function generateGroq(system, contents, declarations, requiredTool)
     method:'POST',headers:{Authorization:`Bearer ${process.env.GROQ_API_KEY}`,'content-type':'application/json'},
     body:JSON.stringify({model,messages:groqMessages(system,contents),tools:declarations.map(d=>({type:'function',function:{...d,parameters:jsonSchema(d.parameters)}})),
       tool_choice:requiredTool?{type:'function',function:{name:requiredTool}}:'auto',max_completion_tokens:900}),
-    signal:AbortSignal.timeout(45000),
+    signal:AbortSignal.timeout(20000),
   });
   if(!response.ok) throw new Error(`Groq HTTP ${response.status}: model request failed`);
   const data=await response.json(),message=data.choices?.[0]?.message;
