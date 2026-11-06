@@ -2,18 +2,38 @@ openapi: 3.1.0
 info:
   title: Resaf reservation API
   version: 0.1.0
-  description: Initial approval-claim API. PayPal commitment and purchase routes are pending.
+  description: Merchant policy, PayPal-backed commitment, reservation and settlement API. Final purchase checkout is pending.
 servers:
   - url: https://resaf-api.onrender.com
 security:
   - bearerAuth: []
 components:
   securitySchemes:
+    merchantAuth:
+      type: http
+      scheme: bearer
+      description: Server-side merchant key. Buyer and agent keys cannot publish policies.
     bearerAuth:
       type: http
       scheme: bearer
       description: Demo key bound by the server to a seeded buyer identity.
   schemas:
+    PolicyInput:
+      type: object
+      additionalProperties: false
+      required: [commitment_amount, currency, payment_mode, hold_duration_seconds, approval_claim_seconds, max_active_holds_per_buyer, repeat_cooldown_seconds, purchase_refund_bps, release_refund_bps, expiry_refund_bps]
+      properties:
+        commitment_amount: { type: string, pattern: '^\d{1,8}\.\d{2}$', example: '2.00' }
+        currency: { type: string, enum: [USD] }
+        payment_mode: { type: string, enum: [AUTHORIZE, CAPTURE] }
+        hold_duration_seconds: { type: integer, minimum: 1, maximum: 86400 }
+        approval_claim_seconds: { type: integer, minimum: 30, maximum: 300 }
+        max_active_holds_per_buyer: { type: integer, minimum: 1, maximum: 10 }
+        repeat_cooldown_seconds: { type: integer, minimum: 0, maximum: 604800 }
+        purchase_refund_bps: { type: integer, minimum: 0, maximum: 10000 }
+        release_refund_bps: { type: integer, minimum: 0, maximum: 10000 }
+        expiry_refund_bps: { type: integer, minimum: 0, maximum: 10000 }
+        effective_at: { type: string, format: date-time, description: Omit to apply immediately. Future dates schedule a policy change. }
     Error:
       type: object
       properties:
@@ -32,6 +52,38 @@ components:
             amount: { type: string }
             currency: { type: string }
 paths:
+  /api/v1/resources/{id}/policy:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string }
+    get:
+      security: []
+      description: Discover the currently effective merchant policy without payment.
+      responses:
+        '200': { description: Current policy including its ID, version and settlement terms }
+        '404': { description: Resource has no effective policy }
+    post:
+      security:
+        - merchantAuth: []
+      description: Publish an immutable policy version. Does not alter existing reservations.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, minLength: 8, maxLength: 128 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PolicyInput' }
+      responses:
+        '201': { description: Created policy or replay of the same idempotent request }
+        '400': { description: Invalid policy terms }
+        '401': { description: Merchant credentials required }
+        '404': { description: Resource does not belong to merchant }
+        '409': { description: Idempotency key reused with different terms }
   /health:
     get:
       security: []
@@ -100,10 +152,10 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         '200': { description: Claim released }
-        '202': { description: Claim released; PayPal void still pending }
+        '202': { description: Reservation ended; PayPal settlement still pending }
   /api/v1/reservations/{id}/commitment:
     post:
-      description: Create a PayPal authorization order for an unexpired provisional claim.
+      description: Create a PayPal commitment order using the reservation's accepted AUTHORIZE or CAPTURE policy.
       parameters:
         - in: path
           name: id
@@ -114,12 +166,12 @@ paths:
         '409': { description: Claim expired or no longer eligible }
   /api/v1/reservations/{id}/confirm:
     post:
-      description: Verify PayPal buyer approval and authorization before activating the reservation.
+      description: Verify PayPal authorization or completed capture before activating the reservation.
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string, format: uuid }
       responses:
-        '200': { description: PayPal authorization verified and reservation activated }
+        '200': { description: PayPal commitment verified and reservation activated }
         '409': { description: Approval missing or claim ended }

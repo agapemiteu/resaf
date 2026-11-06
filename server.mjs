@@ -4,6 +4,7 @@ import pg from 'pg';
 import { requestApprovalClaim, releaseClaim, ReservationError } from './src/core/reservations/claims.ts';
 import { startCommitment, confirmCommitment, voidOutstanding, verifyCallback } from './src/core/reservations/commitment.mjs';
 import { runExpirationSweep } from './src/core/reservations/sweep.mjs';
+import { currentPolicy, createPolicy } from './src/core/policies/config.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const merchantId = 'merchant-001';
@@ -17,6 +18,13 @@ function identity(request) {
   if (!bearer) return null;
   const hash = createHash('sha256').update(bearer).digest();
   return identities.find((entry) => timingSafeEqual(hash, createHash('sha256').update(entry.key).digest())) ?? null;
+}
+
+function merchantAuthorized(request) {
+  const key = request.headers.authorization?.match(/^Bearer ([^\s]+)$/)?.[1];
+  const expected = process.env.MERCHANT_API_KEY;
+  return Boolean(key && expected && !expected.startsWith('replace-') && timingSafeEqual(
+    createHash('sha256').update(key).digest(), createHash('sha256').update(expected).digest()));
 }
 
 function send(response, status, body) {
@@ -88,6 +96,21 @@ const server = createServer(async (request, response) => {
       response.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       response.end(`<html><title>Resaf Sandbox</title><body style="font:18px system-ui;max-width:38rem;margin:5rem auto"><h1>${heading}</h1><p>${message}</p></body></html>`);
       return;
+    }
+
+    const policyMatch = url.pathname.match(/^\/api\/v1\/resources\/([a-zA-Z0-9-]+)\/policy$/);
+    if (policyMatch && request.method === 'GET') {
+      const policy = await currentPolicy(merchantId, policyMatch[1]);
+      return send(response, policy ? 200 : 404, policy ?? { error: 'POLICY_NOT_FOUND' });
+    }
+    if (policyMatch && request.method === 'POST') {
+      if (!merchantAuthorized(request)) return send(response, 401, { error: 'UNAUTHORIZED' });
+      const key = request.headers['idempotency-key'];
+      if (typeof key !== 'string' || key.length < 8 || key.length > 128) {
+        return send(response, 400, { error: 'IDEMPOTENCY_KEY_REQUIRED' });
+      }
+      const policy = await createPolicy(merchantId, policyMatch[1], await readBody(request), key);
+      return send(response, 201, policy);
     }
 
     const resourceMatch = url.pathname.match(/^\/api\/v1\/resources\/([a-zA-Z0-9-]+)$/);
@@ -172,7 +195,8 @@ const server = createServer(async (request, response) => {
     if (error instanceof ReservationError) {
       const conflict = ['SOLD', 'UNAVAILABLE', 'BUYER_LIMIT', 'COOLDOWN', 'IDEMPOTENCY_CONFLICT',
         'CLAIM_EXPIRED', 'CLAIM_ENDED', 'APPROVAL_REQUIRED'];
-      return send(response, conflict.includes(error.code) ? 409 : 400, { error: error.code, message: error.message });
+      const status = ['NOT_FOUND', 'RESOURCE_NOT_FOUND', 'POLICY_NOT_FOUND'].includes(error.code) ? 404 : conflict.includes(error.code) ? 409 : 400;
+      return send(response, status, { error: error.code, message: error.message });
     }
     console.error(error);
     send(response, 500, { error: 'INTERNAL_ERROR' });

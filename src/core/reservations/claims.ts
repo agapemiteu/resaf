@@ -83,7 +83,7 @@ export async function requestApprovalClaim(input: ClaimRequest) {
 
     const policyResult = await client.query(`SELECT * FROM reservation_policies
       WHERE resource_id = $1 AND merchant_id = $2 AND effective_at <= now()
-      ORDER BY version DESC LIMIT 1`,
+      ORDER BY effective_at DESC, version DESC LIMIT 1`,
       [input.resourceId, input.merchantId]);
     const policy = policyResult.rows[0];
     if (!policy) throw new ReservationError('POLICY_NOT_FOUND', 'Resource has no reservation policy.');
