@@ -148,14 +148,19 @@ const server = createServer(async (request, response) => {
         const claim = await releaseClaim(merchantId, actor.buyerId, id);
         let paymentStatus = null;
         try { paymentStatus = await voidOutstanding(id); }
-        catch { paymentStatus = 'VOID_PENDING'; }
-        return send(response, paymentStatus === 'VOID_PENDING' ? 202 : 200,
+        catch { paymentStatus = 'SETTLEMENT_PENDING'; }
+        return send(response, ['SETTLEMENT_PENDING', 'REFUND_PENDING', 'CAPTURE_PENDING'].includes(paymentStatus) ? 202 : 200,
           { reservation_id: claim.id, status: claim.status, payment_status: paymentStatus });
       }
       const owned = await pool.query(`SELECT r.* FROM reservations r JOIN resources i ON i.id = r.resource_id
         WHERE r.id = $1 AND r.buyer_id = $2 AND i.merchant_id = $3`, [id, actor.buyerId, merchantId]);
       if (!owned.rowCount) return send(response, 404, { error: 'NOT_FOUND' });
-      if (request.method === 'GET' && !action) return send(response, 200, owned.rows[0]);
+      if (request.method === 'GET' && !action) {
+        const payments = await pool.query(`SELECT type, status, amount, currency, provider_order_id,
+          provider_authorization_id, provider_capture_id, provider_refund_id FROM payment_transactions
+          WHERE reservation_id = $1 ORDER BY created_at, id`, [id]);
+        return send(response, 200, { ...owned.rows[0], payments: payments.rows });
+      }
       if (request.method === 'GET' && action === 'events') {
         const events = await pool.query(`SELECT event_type, event_payload, occurred_at FROM reservation_events
           WHERE reservation_id = $1 ORDER BY occurred_at, id`, [id]);

@@ -3,7 +3,7 @@
 Merchants select the payment mode in an immutable policy version. Existing reservations keep their original policy. Scheduled versions use `effective_at`; the agent receives the current quote and settlement percentages in the reservation response.
 
 - `AUTHORIZE`: verify a PayPal authorization before reservation activation, then void it when the reservation ends. This mode is verified in Sandbox.
-- `CAPTURE`: verify a completed capture before activation. Store the capture ID and apply the policy's full, partial, or zero refund on a terminal outcome. This implementation awaits a Sandbox capture/refund test and is not the default demo policy.
+- `CAPTURE`: verify a completed capture before activation. Store the capture ID and apply the policy's full, partial, or zero refund on a terminal outcome. Demo policy version 3 selects this mode: $2 collected, $1 refunded on early release, full refund after a verified purchase, and no refund on expiry. Live Sandbox verification is pending.
 
 Refund percentages are integers in basis points: `10000` returns 100%, `2500` returns 25%, and `0` retains the fee. Fractional cents round down. Separate fields govern purchase, early release, and expiry. Failed inventory allocation returns the full captured commitment. Purchase settlement must only run after the merchant has verified the final purchase; purchase checkout is not implemented yet.
 

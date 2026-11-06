@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { expireDueClaims } from './claims.ts';
 import { voidOutstanding } from './commitment.mjs';
+import { reconcileFeeCaptures } from './fees.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
 
@@ -11,6 +12,7 @@ export async function runExpirationSweep() {
     batch = await expireDueClaims(100);
     expired += batch;
   } while (batch === 100);
+  await reconcileFeeCaptures();
 
   const pending = await pool.query(`SELECT DISTINCT r.id FROM reservations r
     JOIN payment_transactions p ON p.reservation_id = r.id

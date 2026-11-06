@@ -1,11 +1,32 @@
 import pg from 'pg';
-import { captureOrder, refundCapture, getRefund, getCapture } from '../../integrations/paypal/client.mjs';
+import { captureOrder, refundCapture, getRefund, getCapture, getOrder } from '../../integrations/paypal/client.mjs';
 import { refundAmount } from '../payments/fee-policy.mjs';
 import { ReservationError } from './claims.ts';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 3 });
 
+export async function reconcileFeeCaptures() {
+  const unresolved = await pool.query(`SELECT t.id, t.provider_order_id FROM payment_transactions t
+    JOIN reservations r ON r.id = t.reservation_id
+    WHERE t.type = 'COMMITMENT_FEE' AND t.status = 'CAPTURE_REQUESTED'
+      AND t.provider_capture_id IS NULL AND r.status IN ('EXPIRED', 'RELEASED', 'FAILED') LIMIT 100`);
+  for (const payment of unresolved.rows) {
+    const order = await getOrder(payment.provider_order_id);
+    const captureId = order.purchase_units?.flatMap((unit) => unit.payments?.captures ?? [])[0]?.id;
+    if (!captureId) continue; // An uncertain provider outcome stays recoverable.
+    const capture = await getCapture(captureId);
+    await pool.query(`UPDATE payment_transactions SET provider_capture_id = $2,
+      amount = $3, currency = $4, status = 'CAPTURE_RECONCILE' WHERE id = $1`,
+      [payment.id, capture.id, capture.amount.value, capture.amount.currency_code]);
+    // A capture without a confirmed reservation must be refunded in full.
+    await pool.query(`UPDATE reservations SET status = 'FAILED' WHERE id =
+      (SELECT reservation_id FROM payment_transactions WHERE id = $1) AND activated_at IS NULL`, [payment.id]);
+  }
+}
+
 export async function confirmFee(claim, payment) {
+  await pool.query(`UPDATE payment_transactions SET status = 'CAPTURE_REQUESTED'
+    WHERE id = $1 AND status IN ('APPROVAL_REQUIRED', 'CAPTURE_REQUESTED')`, [payment.id]);
   const client = await pool.connect();
   let captured;
   let active;
@@ -46,9 +67,12 @@ export async function confirmFee(claim, payment) {
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
+    if (error instanceof ReservationError && error.code === 'APPROVAL_REQUIRED') {
+      await client.query(`UPDATE payment_transactions SET status = 'APPROVAL_REQUIRED' WHERE id = $1`, [payment.id]);
+    }
     if (captured?.id) {
-      await pool.query(`UPDATE payment_transactions SET provider_capture_id = $2, status = 'CAPTURE_RECONCILE' WHERE id = $1`, [payment.id, captured.id]);
-      await pool.query(`UPDATE reservations SET status = 'FAILED', ended_at = now() WHERE id = $1 AND status = 'PENDING_COMMITMENT'`, [claim.id]);
+      await client.query(`UPDATE payment_transactions SET provider_capture_id = $2, status = 'CAPTURE_RECONCILE' WHERE id = $1`, [payment.id, captured.id]);
+      await client.query(`UPDATE reservations SET status = 'FAILED', ended_at = now() WHERE id = $1 AND status = 'PENDING_COMMITMENT'`, [claim.id]);
     }
     throw error;
   } finally { client.release(); }
