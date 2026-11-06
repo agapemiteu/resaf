@@ -3,7 +3,7 @@ services:
     name: resaf-api
     runtime: node
     plan: free
-    buildCommand: npm ci
+    buildCommand: npm ci && npm run build
     startCommand: node scripts/db-setup.mjs && node server.mjs
     healthCheckPath: /health
     envVars:

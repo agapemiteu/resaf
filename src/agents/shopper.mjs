@@ -73,13 +73,14 @@ async function tool(name, args, key, runId, step) {
   return { http_status: r.status, ...await r.json() };
 }
 
-export async function createAgentRun(actor, objective, requestKey) {
+export async function createAgentRun(actor, objective, requestKey, resourceId = null) {
   if (!process.env.GEMINI_API_KEY && !process.env.GROQ_API_KEY) throw new ReservationError('MODEL_NOT_CONFIGURED', 'Model access is not configured.');
   if (typeof objective !== 'string' || !objective.trim() || objective.length > 2000) throw new ReservationError('INVALID_OBJECTIVE', 'Provide a shopping objective up to 2000 characters.');
-  const result = await pool.query(`INSERT INTO agent_runs (merchant_id,buyer_id,objective,request_key)
-    VALUES ('merchant-001',$1,$2,$3) ON CONFLICT (merchant_id,buyer_id,request_key)
-    DO UPDATE SET request_key = excluded.request_key RETURNING *`, [actor.buyerId, objective.trim(), requestKey]);
-  if (result.rows[0].objective !== objective.trim()) throw new ReservationError('IDEMPOTENCY_CONFLICT', 'Agent key reused with a different objective.');
+  if (resourceId !== null && (typeof resourceId !== 'string' || !(await pool.query(`SELECT id FROM resources WHERE id=$1 AND merchant_id='merchant-001'`,[resourceId])).rowCount)) throw new ReservationError('RESOURCE_NOT_FOUND','Resource does not belong to this merchant.');
+  const result = await pool.query(`INSERT INTO agent_runs (merchant_id,buyer_id,objective,request_key,resource_id)
+    VALUES ('merchant-001',$1,$2,$3,$4) ON CONFLICT (merchant_id,buyer_id,request_key)
+    DO UPDATE SET request_key = excluded.request_key RETURNING *`, [actor.buyerId, objective.trim(), requestKey,resourceId]);
+  if (result.rows[0].objective !== objective.trim() || result.rows[0].resource_id !== resourceId) throw new ReservationError('IDEMPOTENCY_CONFLICT', 'Agent key reused with a different objective or resource.');
   return result.rows[0];
 }
 
@@ -90,9 +91,9 @@ export async function processAgentRun(id) {
   const run = selected.rows[0];
   const key = run.buyer_id === 'buyer-a' ? process.env.DEMO_AGENT_A_KEY : process.env.DEMO_AGENT_B_KEY;
   const steps = run.steps || [];
-  const contents = [{ role: 'user', parts: [{ text: run.objective + (steps.length ? '\nPrevious observed actions: ' + JSON.stringify(steps) : '') }] }];
+  const contents = [{ role: 'user', parts: [{ text: run.objective + (run.resource_id ? `\nThe merchant selected resource ${run.resource_id}. Work only on that resource; use get_resource for its live status.` : '') + (steps.length ? '\nPrevious observed actions: ' + JSON.stringify(steps) : '') }] }];
   let status = 'COMPLETED';
-  let result = run.result?.reservation_id ? { reservation_id: run.result.reservation_id } : {};
+  let result = {resource_id:run.resource_id,...(run.result?.reservation_id ? { reservation_id: run.result.reservation_id } : {})};
   try {
     for (let turn = 0; turn < 8; turn++) {
       const generated = await generateAction(contents);
@@ -108,10 +109,12 @@ export async function processAgentRun(id) {
         await pool.query(`UPDATE agent_runs SET steps = $2, updated_at = now() WHERE id = $1`, [id, JSON.stringify(steps)]);
         answers.push({ functionResponse: { name: call.name, response: observation } });
         if (observation.reservation_id) result.reservation_id = observation.reservation_id;
+        const focused = observation.resources?.find(r=>r.id===run.resource_id) || observation;
+        if (focused.status === 'SOLD') {status='POLICY_DENIED';result={...result,error:'RESOURCE_SOLD',message:'This resource has already been purchased. No new payment was initiated.'};break;}
         if (observation.approval_url) { status = 'AWAITING_APPROVAL'; result = { ...result, ...observation }; break; }
         if (observation.waiting) { status = 'WAITING_FOR_AVAILABILITY'; result.resource_id = observation.resource_id; break; }
         if (observation.error) {
-          status = observation.error === 'UNAVAILABLE' ? 'WAITING_FOR_AVAILABILITY' : 'POLICY_DENIED';
+          status = observation.http_status >= 500 || ['UNKNOWN_TOOL','UNAUTHORIZED','INTERNAL_ERROR'].includes(observation.error) ? 'FAILED' : observation.error === 'UNAVAILABLE' ? 'WAITING_FOR_AVAILABILITY' : 'POLICY_DENIED';
           result = { ...result, ...observation, resource_id: call.args?.resource_id || result.resource_id || 'demo-resource-001' }; break;
         }
       }
@@ -119,14 +122,33 @@ export async function processAgentRun(id) {
       if (status !== 'COMPLETED') break;
       if (turn === 7) { status = 'LIMIT_REACHED'; result.summary = 'Agent stopped after the permitted tool rounds.'; }
     }
-  } catch (error) { status = 'FAILED'; result = { error: error.message }; }
+  } catch (error) { status = 'FAILED'; result = {...result, error: error.message }; }
   await pool.query(`UPDATE agent_runs SET status = $2, steps = $3, result = $4, updated_at = now() WHERE id = $1`,
     [id, status, JSON.stringify(steps), JSON.stringify(result)]);
+  if (['FAILED','LIMIT_REACHED'].includes(status)) await recordBusinessFailure(run,
+      'Agent stopped without assuming payment success. Inspect the recorded tool results before retrying. '+String(result.error || result.summary || '').slice(0,300));
+}
+
+async function recordBusinessFailure(run,message) {
+  await pool.query(`INSERT INTO business_alerts (merchant_id,resource_id,run_id,code,message)
+    VALUES ($1,$2,$3,'AGENT_NEEDS_REVIEW',$4) ON CONFLICT DO NOTHING`,[run.merchant_id,run.resource_id,run.id,
+      message]);
+}
+
+export async function runFailureDrill(actor,resourceId,requestKey) {
+  const run=await createAgentRun(actor,'Controlled transport failure drill. No PayPal request will be sent.',requestKey,resourceId);
+  if(run.status!=='QUEUED')return run;
+  const steps=[{tool:'injected_transport_failure',result:{error:'SIMULATED_TIMEOUT',simulated:true,paypal_request_sent:false},occurred_at:new Date().toISOString()}];
+  const saved=await pool.query(`UPDATE agent_runs SET kind='FAILURE_DRILL',status='FAILED',steps=$2,result=$3,updated_at=now() WHERE id=$1 RETURNING *`,
+    [run.id,JSON.stringify(steps),JSON.stringify({resource_id:resourceId,error:'SIMULATED_TIMEOUT',simulated:true,payment_status:'NOT_ATTEMPTED'})]);
+  await recordBusinessFailure(run,'SIMULATION: transport failed before any PayPal request. The run stopped and was handed to the business for review. No payment was attempted.');
+  return saved.rows[0];
 }
 
 export async function processWaitingAgents() {
-  await pool.query(`UPDATE agent_runs SET status = 'FAILED', result = '{"error":"Agent execution interrupted; inspect its recorded tools before retrying."}'
-    WHERE status = 'RUNNING' AND updated_at < now() - interval '10 minutes'`);
+  const stale=await pool.query(`UPDATE agent_runs SET status = 'FAILED', result = '{"error":"Agent execution interrupted; inspect its recorded tools before retrying."}'
+    WHERE status = 'RUNNING' AND updated_at < now() - interval '10 minutes' RETURNING *`);
+  for(const run of stale.rows)await recordBusinessFailure(run,'Agent execution was interrupted. Review its recorded payment and tool state before retrying.');
   const waiting = await pool.query(`SELECT * FROM agent_runs WHERE status = 'WAITING_FOR_AVAILABILITY' LIMIT 10`);
   for (const run of waiting.rows) {
     const resourceId = run.result?.resource_id || 'bag-001';

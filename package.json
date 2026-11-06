@@ -10,10 +10,18 @@
   "scripts": {
     "paypal:smoke": "node --env-file=.env.local scripts/paypal-smoke.mjs",
     "db:setup": "node --env-file=.env.local scripts/db-setup.mjs",
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "build": "esbuild ui/main.jsx --bundle --format=esm --minify --outfile=public/assets/app.js --define:process.env.NODE_ENV='\"production\"'"
   },
   "dependencies": {
+    "@base-ui/react": "^1.9.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.4",
-    "pg": "^8.23.1"
+    "esbuild": "^0.27.7",
+    "pg": "^8.23.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwind-merge": "^3.7.0"
   }
 }

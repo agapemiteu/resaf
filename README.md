@@ -17,6 +17,7 @@ Requires Node.js 24 and PostgreSQL. Copy `.env.example` to `.env.local`, then se
 ```powershell
 npm ci
 npm run db:setup
+npm run build
 node --env-file=.env.local server.mjs
 ```
 
@@ -51,3 +52,11 @@ The main demo accepts a natural-language objective and displays actual model-sel
 Set `GEMINI_API_KEY` for Gemini. Optional `GROQ_API_KEY` enables a tool-calling fallback when Gemini is rate limited or temporarily unavailable (`GROQ_MODEL` defaults to `openai/gpt-oss-20b`). No provider key enters the browser or model prompt. Fallback selects model actions only; it never replays completed payment tools. Groq configuration has no effect without a valid key.
 
 After verified purchase, the UI displays a printable Sandbox confirmation with the final payment ID and separate commitment/refund totals. The receipt endpoint rejects unpaid reservations and rechecks the actual PayPal capture. A real $25 Sandbox capture and full $2 commitment refund were independently verified; the authenticated receipt endpoint returned the matching parking confirmation.
+
+## Focused React demonstration
+
+The frontend uses React, source-owned shadcn-style components over Base UI primitives, and an esbuild production bundle. The main card shows one current outcome and next action. Competition, failure tests, receipts, and business controls are separate dialogs. AG Grid appears inside the competition dialog with actual claimant outcomes and expandable backend evidence.
+
+?Start a fresh round? creates a new simulated merchant unit and policy, preserving previous paid sales and receipts. Two independent model runs then compete through the same reservation API. An unpaid provisional winner still needs PayPal approval before exclusive paid reservation. The losing agent waits or stops according to actual inventory and policy responses.
+
+The edge-case dialog exercises real ownership rejection and duplicate-claim rejection. Its transport failure drill is explicitly simulated **before any PayPal request**, and records the same business attention handoff used for real model/tool failures. It creates no payment or fabricated provider result. Business users can mark attention records reviewed in the app; no external messages are sent.

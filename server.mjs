@@ -7,12 +7,13 @@ import { startCommitment, confirmCommitment, voidOutstanding, verifyCallback } f
 import { runExpirationSweep } from './src/core/reservations/sweep.mjs';
 import { currentPolicy, createPolicy } from './src/core/policies/config.mjs';
 import { startPurchase, confirmPurchase } from './src/core/reservations/purchase.mjs';
-import { createAgentRun, processAgentRun, getAgentRun, resumeAgentAfterPayment } from './src/agents/shopper.mjs';
+import { createAgentRun, processAgentRun, getAgentRun, resumeAgentAfterPayment, runFailureDrill } from './src/agents/shopper.mjs';
 import { merchantSession, createDemoSession } from './src/lib/session.mjs';
 import { receiveWebhook } from './src/integrations/paypal/webhooks.mjs';
 import { legacyComparison, legacyEvidence } from './src/integrations/merchant/legacy-demo.mjs';
 import { buildReceipt } from './src/core/reservations/receipt.mjs';
 import { getCapture } from './src/integrations/paypal/client.mjs';
+import { createDemoRound } from './src/integrations/merchant/rounds.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const merchantId = 'merchant-001';
@@ -63,7 +64,9 @@ const server = createServer(async (request, response) => {
       if (request.headers.origin !== allowed) return send(response, 403, { error: 'INVALID_ORIGIN' });
     }
     const staticFiles = { '/': ['index.html','text/html'], '/demo': ['index.html','text/html'],
-      '/app.js': ['app.js','text/javascript'], '/styles.css': ['styles.css','text/css'],
+      '/styles.css': ['styles.css','text/css'],
+      '/agent-state.js': ['agent-state.js','text/javascript'],
+      '/assets/app.js': ['assets/app.js','text/javascript'],
       '/parking-thumbnail.png': ['parking-thumbnail.png','image/png'] };
     if (request.method === 'GET' && staticFiles[url.pathname]) {
       const [file, mime] = staticFiles[url.pathname];
@@ -187,15 +190,36 @@ const server = createServer(async (request, response) => {
       return send(response, rows.length ? 200 : 404, rows[0] ?? { error: 'RESOURCE_NOT_FOUND' });
     }
 
+    if (request.method === 'POST' && url.pathname === '/api/demo/rounds') {
+      if (!merchantAuthorized(request)) return send(response,401,{error:'UNAUTHORIZED'});
+      const key=request.headers['idempotency-key'];
+      if(typeof key!=='string' || key.length<8 || key.length>128) return send(response,400,{error:'IDEMPOTENCY_KEY_REQUIRED'});
+      try {return send(response,201,await createDemoRound(merchantId,key));}
+      catch(error){return send(response,409,{error:'ROUND_BLOCKED',message:error.message});}
+    }
+    if(request.method==='POST' && url.pathname==='/api/demo/failure-drill'){
+      if(!merchantAuthorized(request))return send(response,401,{error:'UNAUTHORIZED'});
+      const key=request.headers['idempotency-key'];
+      if(typeof key!=='string'||key.length<8||key.length>128)return send(response,400,{error:'IDEMPOTENCY_KEY_REQUIRED'});
+      const body=await readBody(request);
+      const actor=identities.find(x=>x.buyerId==='buyer-b');
+      return send(response,200,await runFailureDrill(actor,body.resource_id,key));
+    }
     if (request.method === 'POST' && url.pathname === '/api/demo/legacy-comparison') {
       if (!merchantAuthorized(request)) return send(response, 401, { error: 'UNAUTHORIZED' });
       const body = await readBody(request);
       if (typeof body.resource_id !== 'string' || !/^[a-zA-Z0-9-]{1,64}$/.test(body.resource_id)) return send(response,400,{error:'RESOURCE_ID_REQUIRED'});
       return send(response, 200, await legacyComparison(body.resource_id));
     }
+    const alertMatch=url.pathname.match(/^\/api\/v1\/merchant\/alerts\/([0-9a-f-]{36})\/acknowledge$/i);
+    if(request.method==='POST'&&alertMatch){
+      if(!merchantAuthorized(request))return send(response,401,{error:'UNAUTHORIZED'});
+      const result=await pool.query(`UPDATE business_alerts SET status='REVIEWED' WHERE id=$1 AND merchant_id=$2 RETURNING id,status`,[alertMatch[1],merchantId]);
+      return send(response,result.rowCount?200:404,result.rows[0]||{error:'NOT_FOUND'});
+    }
     if (request.method === 'GET' && url.pathname === '/api/v1/merchant/activity') {
       if (!merchantAuthorized(request)) return send(response, 401, { error: 'UNAUTHORIZED' });
-      const [events, runs, policies, payments, business] = await Promise.all([
+      const [events, runs, policies, payments, business, alerts] = await Promise.all([
         pool.query(`SELECT e.*, r.resource_id, r.buyer_id, r.commitment_amount, r.policy_version FROM reservation_events e
           JOIN reservations r ON r.id = e.reservation_id JOIN resources i ON i.id = r.resource_id
           WHERE i.merchant_id = $1 ORDER BY e.occurred_at DESC LIMIT 200`, [merchantId]),
@@ -204,13 +228,14 @@ const server = createServer(async (request, response) => {
         pool.query(`SELECT t.* FROM payment_transactions t JOIN reservations r ON r.id = t.reservation_id
           JOIN resources i ON i.id = r.resource_id WHERE i.merchant_id = $1 ORDER BY t.created_at DESC LIMIT 300`, [merchantId]),
         pool.query(`SELECT * FROM business_agent_decisions WHERE merchant_id=$1 ORDER BY created_at DESC LIMIT 30`,[merchantId]),
+        pool.query(`SELECT * FROM business_alerts WHERE merchant_id=$1 ORDER BY created_at DESC LIMIT 30`,[merchantId]),
       ]);
       const decisions = events.rows.map(e => ({ id: e.id, resource_id: e.resource_id, occurred_at: e.occurred_at,
         actor: e.buyer_id === 'buyer-a' ? 'Agent A' : 'Agent B', category: /PAYPAL|AUTHORIZATION|CAPTURE|COMMITMENT_SETTLED/.test(e.event_type) ? 'PAYPAL' : 'RESERVATION',
         action: e.event_type, amount: e.commitment_amount, policy_version: e.policy_version,
         outcome: e.event_type, evidence: { event: e, payments: payments.rows.filter(p => p.reservation_id === e.reservation_id) } }));
       for (const r of runs.rows) for (const [n, step] of r.steps.entries()) decisions.push({ id: `${r.id}:${n}`,
-        resource_id: r.steps.find(s=>s.arguments?.resource_id)?.arguments.resource_id,
+        resource_id: r.resource_id || r.result?.resource_id || r.steps.find(s=>s.arguments?.resource_id)?.arguments.resource_id,
         occurred_at: step.occurred_at, actor: r.buyer_id === 'buyer-a' ? 'Agent A' : 'Agent B', category: 'AGENT',
         action: step.tool, amount: step.result?.commitment?.amount, policy_version: step.result?.policy_version,
         outcome: step.result?.error || step.result?.status || `HTTP ${step.result?.http_status || 'TOOL'}`, evidence: step });
@@ -223,7 +248,7 @@ const server = createServer(async (request, response) => {
         actor:'Business AI',category:'POLICY',action:'recommend_commitment',amount:d.decision?.amount,
         outcome:d.status === 'COMPLETED' ? `${d.decision.action}: ${d.decision.explanation}` : d.status,evidence:d});
       decisions.sort((a,b) => new Date(a.occurred_at) - new Date(b.occurred_at));
-      return send(response, 200, { decisions, runs: runs.rows, business_decisions:business.rows });
+      return send(response, 200, { decisions, runs: runs.rows, business_decisions:business.rows,alerts:alerts.rows });
     }
     const actor = identity(request);
     if (!actor) return send(response, 401, { error: 'UNAUTHORIZED' });
@@ -232,7 +257,7 @@ const server = createServer(async (request, response) => {
       const body = await readBody(request);
       const key = request.headers['idempotency-key'];
       if (typeof key !== 'string' || key.length < 8 || key.length > 128) return send(response, 400, { error: 'IDEMPOTENCY_KEY_REQUIRED' });
-      const run = await createAgentRun(actor, body.objective, key);
+      const run = await createAgentRun(actor, body.objective, key,body.resource_id ?? null);
       void processAgentRun(run.id).catch(error => console.error('Agent processing failed:', error.message));
       return send(response, 202, run);
     }

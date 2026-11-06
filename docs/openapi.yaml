@@ -188,3 +188,28 @@ paths:
         '200': { description: Verified payment receipt with separate commitment and confirmed refund totals }
         '404': { description: Reservation does not belong to this buyer }
         '409': { description: Purchase or payment is not verified }
+
+  /api/demo/rounds:
+    post:
+      security: [{ merchantAuth: [] }]
+      description: Create a fresh simulated merchant resource and policy without resetting any previous financial records. Requires Idempotency-Key; blocked while a live claim exists.
+      responses:
+        '201': { description: New or idempotently replayed round and resource ID }
+        '401': { description: Merchant authorization required }
+        '409': { description: Current claim must finish first }
+  /api/demo/failure-drill:
+    post:
+      security: [{ merchantAuth: [] }]
+      description: Clearly labelled transport failure injection before any PayPal request; records a failed drill and business attention handoff.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resource_id]
+              properties:
+                resource_id: { type: string }
+      responses:
+        '200': { description: Recorded simulated failure with payment NOT_ATTEMPTED }
+        '401': { description: Merchant authorization required }

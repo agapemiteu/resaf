@@ -9,3 +9,5 @@ coverage/
 session.log
 MEMORY.md
 .gstack/
+
+public/assets/
