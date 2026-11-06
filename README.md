@@ -1,5 +1,7 @@
 # Resaf
 
+[Live demo](https://resaf-api.onrender.com) ? [Try the API](https://resaf-api.onrender.com/developers) ? [OpenAPI](https://resaf-api.onrender.com/openapi.yaml) ? [Postman collection](https://resaf-api.onrender.com/postman.json)
+
 Resaf is a merchant-facing API for financially backed, time-limited reservations requested by shopping agents. The demo uses one scarce product. Merchant policy and PayPal verification, rather than the agent, determine whether exclusivity is granted.
 
 ## Current status

@@ -63,7 +63,7 @@ const server = createServer(async (request, response) => {
       const allowed = new URL(process.env.RENDER_EXTERNAL_URL || `http://localhost:${process.env.PORT || 3000}`).origin;
       if (request.headers.origin !== allowed) return send(response, 403, { error: 'INVALID_ORIGIN' });
     }
-    const staticFiles = { '/': ['index.html','text/html'], '/demo': ['index.html','text/html'],
+    const staticFiles = { '/': ['index.html','text/html'], '/demo': ['index.html','text/html'], '/developers':['index.html','text/html'],
       '/styles.css': ['styles.css','text/css'],
       '/agent-state.js': ['agent-state.js','text/javascript'],
       '/assets/app.js': ['assets/app.js','text/javascript'],
@@ -78,6 +78,10 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/openapi.yaml') {
       response.writeHead(200, { 'content-type':'text/yaml; charset=utf-8' });
       response.end(await readFile(new URL('./docs/openapi.yaml',import.meta.url))); return;
+    }
+    if(request.method==='GET' && url.pathname==='/postman.json'){
+      response.writeHead(200,{'content-type':'application/json; charset=utf-8'});
+      response.end(await readFile(new URL('./docs/postman.collection.json',import.meta.url)));return;
     }
     if (url.pathname === '/api/demo/session') {
       if (request.method === 'POST') {
