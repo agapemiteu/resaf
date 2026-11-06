@@ -10,6 +10,7 @@ import { startPurchase, confirmPurchase } from './src/core/reservations/purchase
 import { createAgentRun, processAgentRun, getAgentRun, resumeAgentAfterPayment } from './src/agents/shopper.mjs';
 import { merchantSession, createDemoSession } from './src/lib/session.mjs';
 import { receiveWebhook } from './src/integrations/paypal/webhooks.mjs';
+import { legacyComparison, legacyEvidence } from './src/integrations/merchant/legacy-demo.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const merchantId = 'merchant-001';
@@ -67,6 +68,10 @@ const server = createServer(async (request, response) => {
         'x-content-type-options': 'nosniff', 'referrer-policy': 'same-origin' });
       response.end(await readFile(new URL(`./public/${file}`, import.meta.url)));
       return;
+    }
+    if (request.method === 'GET' && url.pathname === '/openapi.yaml') {
+      response.writeHead(200, { 'content-type':'text/yaml; charset=utf-8' });
+      response.end(await readFile(new URL('./docs/openapi.yaml',import.meta.url))); return;
     }
     if (url.pathname === '/api/demo/session') {
       if (request.method === 'POST') {
@@ -179,10 +184,16 @@ const server = createServer(async (request, response) => {
       return send(response, rows.length ? 200 : 404, rows[0] ?? { error: 'RESOURCE_NOT_FOUND' });
     }
 
+    if (request.method === 'POST' && url.pathname === '/api/demo/legacy-comparison') {
+      if (!merchantAuthorized(request)) return send(response, 401, { error: 'UNAUTHORIZED' });
+      const body = await readBody(request);
+      if (typeof body.resource_id !== 'string' || !/^[a-zA-Z0-9-]{1,64}$/.test(body.resource_id)) return send(response,400,{error:'RESOURCE_ID_REQUIRED'});
+      return send(response, 200, await legacyComparison(body.resource_id));
+    }
     if (request.method === 'GET' && url.pathname === '/api/v1/merchant/activity') {
       if (!merchantAuthorized(request)) return send(response, 401, { error: 'UNAUTHORIZED' });
       const [events, runs, policies, payments] = await Promise.all([
-        pool.query(`SELECT e.*, r.buyer_id, r.commitment_amount, r.policy_version FROM reservation_events e
+        pool.query(`SELECT e.*, r.resource_id, r.buyer_id, r.commitment_amount, r.policy_version FROM reservation_events e
           JOIN reservations r ON r.id = e.reservation_id JOIN resources i ON i.id = r.resource_id
           WHERE i.merchant_id = $1 ORDER BY e.occurred_at DESC LIMIT 200`, [merchantId]),
         pool.query(`SELECT * FROM agent_runs WHERE merchant_id = $1 ORDER BY created_at DESC LIMIT 20`, [merchantId]),
@@ -190,18 +201,20 @@ const server = createServer(async (request, response) => {
         pool.query(`SELECT t.* FROM payment_transactions t JOIN reservations r ON r.id = t.reservation_id
           JOIN resources i ON i.id = r.resource_id WHERE i.merchant_id = $1 ORDER BY t.created_at DESC LIMIT 300`, [merchantId]),
       ]);
-      const decisions = events.rows.map(e => ({ id: e.id, occurred_at: e.occurred_at,
+      const decisions = events.rows.map(e => ({ id: e.id, resource_id: e.resource_id, occurred_at: e.occurred_at,
         actor: e.buyer_id === 'buyer-a' ? 'Agent A' : 'Agent B', category: /PAYPAL|AUTHORIZATION|CAPTURE|COMMITMENT_SETTLED/.test(e.event_type) ? 'PAYPAL' : 'RESERVATION',
         action: e.event_type, amount: e.commitment_amount, policy_version: e.policy_version,
         outcome: e.event_type, evidence: { event: e, payments: payments.rows.filter(p => p.reservation_id === e.reservation_id) } }));
       for (const r of runs.rows) for (const [n, step] of r.steps.entries()) decisions.push({ id: `${r.id}:${n}`,
+        resource_id: r.steps.find(s=>s.arguments?.resource_id)?.arguments.resource_id,
         occurred_at: step.occurred_at, actor: r.buyer_id === 'buyer-a' ? 'Agent A' : 'Agent B', category: 'AGENT',
         action: step.tool, amount: step.result?.commitment?.amount, policy_version: step.result?.policy_version,
         outcome: step.result?.error || step.result?.status || `HTTP ${step.result?.http_status || 'TOOL'}`, evidence: step });
-      for (const p of policies.rows) decisions.push({ id: `policy:${p.id}`, occurred_at: p.created_at,
+      for (const p of policies.rows) decisions.push({ id: `policy:${p.id}`, resource_id:p.resource_id, occurred_at: p.created_at,
         actor: p.change_source === 'automation' ? 'Business rules' : 'Merchant', category: 'POLICY',
         action: p.change_source === 'automation' ? 'AUTOMATIC_PRICE_ADJUSTMENT' : 'POLICY_PUBLISHED', amount: p.commitment_amount,
         policy_version: p.version, outcome: `Effective ${new Date(p.effective_at).toISOString()}`, evidence: p });
+      decisions.push(...await legacyEvidence());
       decisions.sort((a,b) => new Date(a.occurred_at) - new Date(b.occurred_at));
       return send(response, 200, { decisions, runs: runs.rows });
     }

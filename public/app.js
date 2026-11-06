@@ -1,5 +1,7 @@
 const $ = id => document.getElementById(id);
+const RESOURCE_ID = 'demo-resource-001';
 let signedIn = false, policy, grid, decisions = [], live = true;
+let afterLoginAgent;
 const agents = { a: {}, b: {} };
 function notice(message) { $('notice').textContent = message; $('notice').hidden = !message; }
 async function api(path, options = {}, buyer) {
@@ -12,11 +14,13 @@ async function api(path, options = {}, buyer) {
 const money = (value, currency = 'USD') => new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(Number(value));
 function button(label, action) { const b = document.createElement('button'); b.className = 'quiet'; b.textContent = label; b.onclick = () => action().catch(error => notice(error.message)); return b; }
 function configureGrid() {
+  if (grid) return;
   if (!window.agGrid) {
     $('decision-grid').hidden = true; $('grid-fallback').hidden = false;
     $('grid-fallback').textContent = 'AG Grid could not load. API evidence remains available below.';
     return;
   }
+  $('decision-grid').hidden = false; $('grid-fallback').hidden = true;
   grid = agGrid.createGrid($('decision-grid'), {
     theme: agGrid.themeQuartz.withParams({ fontFamily: 'DM Sans, system-ui, sans-serif', fontSize: 12,
       headerFontSize: 10, headerFontWeight: 500, backgroundColor: '#ffffff', headerBackgroundColor: '#f2f5ee',
@@ -45,9 +49,11 @@ function renderDecisions() {
 function renderAgent(name, run) {
   if (!run) return;
   agents[name].run = run;
-  $('' + name + '-status').textContent = run.status.replaceAll('_', ' ');
+  const labels = { QUEUED:'REQUEST QUEUED',RUNNING:'AGENT REQUESTING',AWAITING_APPROVAL:'COMMITMENT REQUIRED',
+    WAITING_FOR_AVAILABILITY:'WAITING FOR AVAILABILITY',POLICY_DENIED:'POLICY ENFORCED',FAILED:'AGENT UNAVAILABLE',COMPLETED:'REQUEST COMPLETE' };
+  $('' + name + '-status').textContent = labels[run.status] || run.status.replaceAll('_', ' ');
   const last = run.steps?.at(-1);
-  $(name + '-result').textContent = run.result?.summary || run.result?.error ||
+  $(name + '-result').textContent = run.result?.summary?.split('\n')[0] || run.result?.error ||
     (last ? `${last.tool.replaceAll('_', ' ')}\n${last.result.error || last.result.status || (last.result.waiting ? 'Waiting for inventory. This run resumes automatically.' : 'Tool result recorded in the ledger.')}` : 'Agent is queued…');
   const controls = $(name + '-controls'); controls.replaceChildren();
   const reservation = agents[name].reservation;
@@ -58,8 +64,8 @@ function renderAgent(name, run) {
   }
   if (reservation) {
     if (reservation.status === 'RESERVED') {
-      controls.append(button('Release reservation', async () => { await api(`/api/v1/reservations/${reservation.id}/release`, { method: 'POST' }, name); await refresh(); }));
-      controls.append(button('Request final purchase', async () => {
+      controls.append(button('Release & apply refund', async () => { await api(`/api/v1/reservations/${reservation.id}/release`, { method: 'POST' }, name); await refresh(); }));
+      controls.append(button('Complete booking', async () => {
         const result = await api(`/api/v1/reservations/${reservation.id}/purchase`, { method: 'POST' }, name);
         agents[name].purchaseApproval = result; await loadAgent(name);
       }));
@@ -72,6 +78,35 @@ function renderAgent(name, run) {
       state.textContent = reservation.status + (reservation.expires_at && reservation.status === 'RESERVED' ? ` · until ${new Date(reservation.expires_at).toLocaleTimeString()}` : ''); controls.append(state);
     }
   }
+  if (name === 'a') {
+    const state = reservation?.status;
+    const statuses = { PENDING_COMMITMENT:'COMMITMENT REQUIRED',RESERVED:'RESERVATION ACTIVE',PURCHASE_PENDING:'FINAL PAYMENT REQUIRED',
+      PURCHASED:'BOOKING COMPLETE',RELEASED:'RESOURCE RELEASED',EXPIRED:'HOLD EXPIRED',FAILED:'RESERVATION ENDED' };
+    if (state) $('a-status').textContent = statuses[state] || state;
+    const texts = {
+      PENDING_COMMITMENT:'The agent received your commitment quote. Approve the PayPal Sandbox payment to activate the hold.',
+      RESERVED:'PayPal verified the commitment. Your access is exclusive until the deadline. Complete the booking or release the resource.',
+      PURCHASE_PENDING:'The final booking is separate from the commitment. Approve its PayPal checkout to complete it.',
+      PURCHASED:'PayPal verified the final payment. The booking is complete, and the commitment is settled under its accepted terms.',
+      RELEASED:'The resource is available again. Its commitment is settled according to the terms accepted before payment.',
+      EXPIRED:'The hold ended automatically. The previous holder can no longer complete this reservation.',
+    };
+    if (texts[state]) $('a-result').textContent = texts[state];
+    if (run.status === 'RUNNING' || run.status === 'QUEUED') $('a-result').textContent = 'The agent is checking availability and the business’s current rules.';
+    if (run.status === 'POLICY_DENIED') $('a-result').textContent = run.result?.error === 'COOLDOWN' ? 'This buyer has used its permitted hold. Resaf has blocked another reservation during the cooldown.' : 'The business’s policy denied this request. No new payment was initiated.';
+    const stage = state === 'PENDING_COMMITMENT' ? 1 : state === 'RESERVED' ? 2 : ['PURCHASE_PENDING','PURCHASED','RELEASED','EXPIRED','FAILED'].includes(state) ? 3 : 0;
+    const commitmentPayment = reservation?.payments?.find(p => ['COMMITMENT_FEE','RESERVATION_AUTHORIZATION'].includes(p.type));
+    const finished = ['SETTLED','VOIDED'].includes(commitmentPayment?.status) ||
+      (['RELEASED','EXPIRED'].includes(state) && !commitmentPayment?.provider_capture_id && !commitmentPayment?.provider_authorization_id);
+    if (['RELEASED','EXPIRED'].includes(state) && !commitmentPayment?.provider_capture_id && !commitmentPayment?.provider_authorization_id) $('a-result').textContent = 'The unpaid claim ended. No commitment payment was collected.';
+    if (state === 'PURCHASED' && !finished) $('a-result').textContent = 'The final payment is verified and the booking is complete. The commitment settlement is still processing.';
+    ['request','payment','hold','settle'].forEach((step,index) => $("step-"+step).dataset.state = index < stage || (index === 3 && finished) ? 'complete' : index === stage ? 'active' : '');
+    $('start-demo').hidden = ['QUEUED','RUNNING','AWAITING_APPROVAL','WAITING_FOR_AVAILABILITY'].includes(run.status) || ['RESERVED','PURCHASE_PENDING','PURCHASED'].includes(state);
+    $('live-proof').hidden = !reservation;
+    if (reservation) $('live-response').textContent = JSON.stringify({ reservation: state,
+      payment: commitmentPayment?.status || 'NOT_PAID', capture_id: commitmentPayment?.provider_capture_id || undefined,
+      refund_id: reservation.payments?.find(p=>p.provider_refund_id)?.provider_refund_id || undefined },null,2);
+  }
 }
 async function loadAgent(name) {
   const state = agents[name];
@@ -83,20 +118,20 @@ async function loadAgent(name) {
 }
 async function refresh() {
   try {
-    const [resource, current] = await Promise.all([api('/api/v1/resources/bag-001'), api('/api/v1/resources/bag-001/policy')]);
+    const [resource, current] = await Promise.all([api(`/api/v1/resources/${RESOURCE_ID}`), api(`/api/v1/resources/${RESOURCE_ID}/policy`)]);
     policy = current;
     $('resource-title').textContent = resource.title; $('resource-price').textContent = money(resource.price);
     $('inventory').textContent = resource.status.replaceAll('_', ' ');
     $('available-at').textContent = resource.available_at ? `until ${new Date(resource.available_at).toLocaleTimeString()}` : 'Merchant inventory';
     $('commitment').textContent = money(policy.commitment_amount); $('policy-version').textContent = `Policy v${policy.version} · ${policy.change_source}`;
     $('duration').textContent = `${policy.hold_duration_seconds / 60} min`;
-    $('refund-terms').textContent = `${policy.release_refund_bps / 100}% release · ${policy.purchase_refund_bps / 100}% purchase refund`;
+    $('refund-terms').textContent = `Refunds: ${policy.release_refund_bps / 100}% on release · ${policy.purchase_refund_bps / 100}% after booking · ${policy.expiry_refund_bps / 100}% on expiry`;
     $('automation-status').textContent = policy.automation ? 'AUTOMATIC · WITHIN BUSINESS LIMITS' : 'RULES DISABLED';
     const activity = await api('/api/v1/merchant/activity'); signedIn = true;
-    $('login').hidden = true; $('signout').hidden = false; $('connection').textContent = '● Live connection';
-    decisions = activity.decisions; renderDecisions();
+    $('login').close(); $('login').hidden = true; $('signout').hidden = false; $('connection').textContent = '● Live';
+    decisions = activity.decisions.filter(d => d.resource_id === RESOURCE_ID); renderDecisions();
     for (const name of ['a', 'b']) {
-      const run = activity.runs.find(r => r.buyer_id === `buyer-${name}`);
+      const run = activity.runs.find(r => r.buyer_id === `buyer-${name}` && (r.objective.includes(RESOURCE_ID) || r.steps?.some(s=>s.arguments?.resource_id === RESOURCE_ID)));
       if (run) agents[name].run = run;
       await loadAgent(name);
     }
@@ -104,15 +139,18 @@ async function refresh() {
     if (error.status === 401) { signedIn = false; $('login').hidden = false; $('connection').textContent = 'Merchant sign-in required'; }
     else { $('connection').textContent = 'Connection interrupted'; notice(error.message); }
   }
-  for (const el of document.querySelectorAll('[data-run], [data-check], #automation-form button')) el.disabled = !signedIn;
+  for (const el of document.querySelectorAll('[data-run], [data-check], #automation-form button, #legacy-run')) el.disabled = el.dataset.run ? ['RUNNING','QUEUED'].includes(agents[el.dataset.run]?.run?.status) : !signedIn;
 }
 $('login-form').onsubmit = async e => {
   e.preventDefault();
-  try { await api('/api/demo/session', { method: 'POST', body: JSON.stringify({ key: $('access-key').value }) }); $('access-key').value = ''; notice(''); await refresh(); }
-  catch (error) { notice(error.message); }
+  try { await api('/api/demo/session', { method: 'POST', body: JSON.stringify({ key: $('access-key').value }) }); $('access-key').value = ''; $('login').close(); notice(''); await refresh();
+    if (afterLoginAgent) { const name=afterLoginAgent; afterLoginAgent=null; document.querySelector(`[data-run="${name}"]`).click(); } }
+  catch (error) { $('login-error').textContent = error.message; }
 };
+$('cancel-login').onclick = () => { afterLoginAgent=null; $('login').close(); };
 $('signout').onclick = async () => { await api('/api/demo/session', { method: 'DELETE' }); location.reload(); };
 for (const el of document.querySelectorAll('[data-run]')) el.onclick = async () => {
+  if (!signedIn) { afterLoginAgent = el.dataset.run; $('login').hidden=false; $('login').showModal(); return; }
   el.disabled = true; const name = el.dataset.run;
   try { notice(''); agents[name].reservation = null;
     const run = await api('/api/v1/agents/runs', { method: 'POST', body: JSON.stringify({ objective: $(name + '-objective').value }) }, name);
@@ -130,11 +168,11 @@ $('automation-form').onsubmit = async e => {
   const automation = { min_amount: Number(form.get('min_amount')).toFixed(2), max_amount: Number(form.get('max_amount')).toFixed(2),
     step_amount: Number(form.get('step_amount')).toFixed(2), raise_at: Number(form.get('raise_at')), lower_at: Number(form.get('lower_at')),
     window_seconds: Number(form.get('window_minutes')) * 60, cooldown_seconds: Number(form.get('cooldown_minutes')) * 60 };
-  try { await api('/api/v1/resources/bag-001/policy', { method: 'POST', body: JSON.stringify({ ...policyInput(), automation }) }); notice('Rules enabled. The next scheduled evaluation adjusts new quotes when its conditions are met.'); await refresh(); }
+  try { await api(`/api/v1/resources/${RESOURCE_ID}/policy`, { method: 'POST', body: JSON.stringify({ ...policyInput(), automation }) }); notice('Rules enabled. The next scheduled evaluation adjusts new quotes when its conditions are met.'); await refresh(); }
   catch (error) { notice(error.message); }
 };
 $('disable-automation').onclick = async () => {
-  try { await api('/api/v1/resources/bag-001/policy', { method: 'POST', body: JSON.stringify({ ...policyInput(), automation: null }) }); notice('Automatic adjustment disabled.'); await refresh(); }
+  try { await api(`/api/v1/resources/${RESOURCE_ID}/policy`, { method: 'POST', body: JSON.stringify({ ...policyInput(), automation: null }) }); notice('Automatic adjustment disabled.'); await refresh(); }
   catch (error) { notice(error.message); }
 };
 $('replay').oninput = () => { live = Number($('replay').value) === decisions.length; renderDecisions(); };
@@ -143,4 +181,15 @@ for (const el of document.querySelectorAll('[data-filter]')) el.onclick = () => 
   for (const sibling of document.querySelectorAll('[data-filter]')) sibling.classList.toggle('active', sibling === el);
   grid?.setGridOption('quickFilterText', el.dataset.filter);
 };
+document.querySelector('script[src*="ag-grid"]').addEventListener('load', configureGrid);
+$('trail').addEventListener('toggle', () => { if ($('trail').open) { configureGrid(); renderDecisions(); grid?.sizeColumnsToFit(); } });
 configureGrid(); await refresh(); setInterval(refresh, 4000);
+$('legacy-run').onclick = async () => {
+  try {
+    const result = await api('/api/demo/legacy-comparison', { method: 'POST', body: JSON.stringify({ resource_id: RESOURCE_ID }) });
+    const granted = result.events.filter(e => e.outcome === 'FREE_EXCLUSIVITY_GRANTED').length;
+    const blocked = result.events.some(e => e.action === 'FREE_HOLD_BLOCKED');
+    $('legacy-result').textContent = `${granted} free holds or renewals granted to A. Client B ${blocked ? 'was blocked' : 'was not blocked'}. Inspect the recorded comparison in the ledger.`;
+    await refresh();
+  } catch (error) { notice(error.message); }
+};
