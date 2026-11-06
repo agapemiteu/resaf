@@ -4,8 +4,8 @@ The required combination is PayPal Sandbox and meaningful AI. Sponsor tools are 
 
 | Sponsor | Resaf fit | Decision |
 |---|---|---|
-| Render | Host the app and PostgreSQL database in one platform. | Use for deployment. Keep expiration timestamps in Postgres and add a reliable reconciliation job once payment flows exist. |
-| Postman | Publish and exercise the merchant-facing reservation API. | Add a collection after routes and authentication are stable. |
+| Render | Host the app and PostgreSQL database in one platform. | Live app and database; independent expiration is triggered through Cloudflare. |
+| Postman | Publish and exercise the merchant-facing reservation API. | Collection is committed for discovery and authentication checks. Runner installation was blocked by the npm registry connection; no completed Postman run is claimed yet. |
 | APIMatic | Generate developer-facing SDK/docs from Resaf's OpenAPI contract and use its PayPal API context plugin. | Use after the API contract is stable; maintain one OpenAPI source. |
 | Channel3 | External product discovery for shopping agents. | Skip for the one-product merchant demo; merchant catalog is authoritative. |
 | AG Grid | Interactive ledger of competing reservation attempts, policy versions, PayPal verification, and inventory outcomes. | Use in the demo after the payment flow works; make each row an auditable decision rather than a generic analytics dashboard. |

@@ -7,7 +7,7 @@ Merchants select the payment mode in an immutable policy version. Existing reser
 
 Refund percentages are integers in basis points: `10000` returns 100%, `2500` returns 25%, and `0` retains the fee. Fractional cents round down. Separate fields govern purchase, early release, and expiry. Failed inventory allocation returns the full captured commitment. Purchase settlement must only run after the merchant has verified the final purchase; purchase checkout is not implemented yet.
 
-The current merchant configuration is database-backed. Add a new policy version with `payment_mode = 'CAPTURE'` and explicit `purchase_refund_bps`, `release_refund_bps`, and `expiry_refund_bps`. The merchant policy API/editor remains to be built. No LLM can change these terms.
+Publish immutable versions through the [merchant policy API](merchant-integration.md), with explicit `payment_mode`, `purchase_refund_bps`, `release_refund_bps`, and `expiry_refund_bps`. Only merchant credentials can publish policies; buyer and agent credentials cannot change these terms.
 
 ## Integration boundary
 

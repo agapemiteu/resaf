@@ -6,6 +6,7 @@ Resaf is a merchant-facing API for financially backed, time-limited reservations
 
 - A real PayPal Sandbox $2 authorization and void lifecycle has been verified with the CLI harness.
 - The captured-fee flow has also passed a live Sandbox test: $2 captured, reservation activated, early release confirmed, $1 refunded, and repeated release produced no duplicate refund record. Merchant policy version 3 now selects this fee mode. See [payment modes](docs/payment-modes.md).
+- The merchant policy API is live. Access control, idempotent updates, future scheduling, and preservation of existing quotes were checked against Render. See [merchant integration](docs/merchant-integration.md).
 - The live API has activated a reservation after verifying a real PayPal Sandbox $2 authorization. A competing buyer was rejected while it was active. Purchase checkout remains unimplemented.
 - The Render deployment responds at `https://resaf-api.onrender.com`. Live PostgreSQL claim concurrency and PayPal activation have been verified. A Cloudflare scheduled run automatically expired the active reservation and voided its PayPal authorization; inventory became available and the former buyer's repeat attempt was rejected by cooldown. Cleanup runs are recorded in PostgreSQL.
 
@@ -21,9 +22,9 @@ node --env-file=.env.local server.mjs
 
 `GET /health` confirms the process is running. `GET /api/v1/resources/bag-001` reads the seeded product. `POST /api/v1/reservations` requires a bearer demo key and an `Idempotency-Key` header; it returns a five-minute, nonrenewable provisional claim and the policy's commitment quote. The two demo keys bind requests to two server-defined buyers. The caller cannot choose a buyer ID. An expired provisional claim does not trigger the repeat-hold cooldown because it never granted a financially backed reservation.
 
-After creating a claim, the same buyer calls `POST /api/v1/reservations/{id}/commitment`. The response contains PayPal's approval URL. The PayPal return URL verifies the approved order and authorization before activating the ten-minute reservation. The buyer can also call `POST /api/v1/reservations/{id}/confirm` if the return is interrupted; both paths require the provisional claim to remain valid. `POST /api/v1/reservations/{id}/release` ends the reservation and attempts to void the authorization. A pending void is reported separately from the reservation state.
+After creating a claim, the same buyer calls `POST /api/v1/reservations/{id}/commitment`. The response contains PayPal's approval URL. The PayPal return URL verifies the authorization or completed capture required by the accepted policy before activating the reservation. The buyer can also call `POST /api/v1/reservations/{id}/confirm` if the return is interrupted; both paths require the provisional claim to remain valid. `POST /api/v1/reservations/{id}/release` ends the reservation and settles the commitment using that policy. Pending settlement is reported separately from the reservation state.
 
-The current API contract is [docs/openapi.yaml](docs/openapi.yaml). It is the source to import into Postman and APIMatic once the payment routes are complete. The sponsor decision is in [docs/sponsors.md](docs/sponsors.md).
+The current API contract is [docs/openapi.yaml](docs/openapi.yaml), ready for Postman and APIMatic import. A [Postman collection](docs/postman.collection.json) checks discovery and unauthenticated-write rejection without financial operations. Its runner could not install in this environment because the npm registry connection was refused; the same API behavior was verified directly. APIMatic-generated SDKs have not yet been published. The sponsor decision is in [docs/sponsors.md](docs/sponsors.md).
 
 ## Render
 
