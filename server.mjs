@@ -126,6 +126,12 @@ const server = createServer(async (request, response) => {
       let status = 200;
       let heading = approved ? 'Returned from PayPal' : 'PayPal checkout canceled';
       let message = approved ? 'Approval and authorization are not yet verified.' : 'No reservation was activated.';
+      let demoUrl='/demo';
+      const callbackId=url.searchParams.get('reservation_id'),callbackBuyer=url.searchParams.get('buyer_id');
+      if(/^[0-9a-f-]{36}$/i.test(callbackId||'')&&/^buyer-[ab]$/.test(callbackBuyer||'')&&verifyCallback(callbackId,callbackBuyer,url.searchParams.get('sig'))){
+        const linked=await pool.query(`SELECT resource_id FROM reservations WHERE id=$1 AND buyer_id=$2`,[callbackId,callbackBuyer]);
+        if(linked.rowCount)demoUrl=`/demo?resource=${encodeURIComponent(linked.rows[0].resource_id)}`;
+      }
       if (approved && url.searchParams.has('reservation_id')) {
         const id = url.searchParams.get('reservation_id');
         const buyerId = url.searchParams.get('buyer_id');
@@ -152,7 +158,7 @@ const server = createServer(async (request, response) => {
         }
       }
       response.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      response.end(`<html><title>Resaf Sandbox</title><body style="font:18px system-ui;max-width:38rem;margin:5rem auto"><h1>${heading}</h1><p>${message}</p><a href="/demo">Return to the Resaf demo</a></body></html>`);
+      response.end(`<html><title>Resaf Sandbox</title><body style="font:18px system-ui;max-width:38rem;margin:5rem auto"><h1>${heading}</h1><p>${message}</p><a href="${demoUrl}">Return to Resaf</a></body></html>`);
       return;
     }
 
@@ -323,7 +329,10 @@ const server = createServer(async (request, response) => {
         return send(response, ['SETTLEMENT_PENDING', 'REFUND_PENDING', 'CAPTURE_PENDING'].includes(paymentStatus) ? 202 : 200,
           { reservation_id: claim.id, status: claim.status, payment_status: paymentStatus });
       }
-      const owned = await pool.query(`SELECT r.* FROM reservations r JOIN resources i ON i.id = r.resource_id
+      const owned = await pool.query(`SELECT r.*, json_build_object('payment_mode',p.payment_mode,
+        'hold_duration_seconds',p.hold_duration_seconds,'purchase_refund_bps',p.purchase_refund_bps,
+        'release_refund_bps',p.release_refund_bps,'expiry_refund_bps',p.expiry_refund_bps) AS terms
+        FROM reservations r JOIN resources i ON i.id = r.resource_id JOIN reservation_policies p ON p.id=r.policy_id
         WHERE r.id = $1 AND r.buyer_id = $2 AND i.merchant_id = $3`, [id, actor.buyerId, merchantId]);
       if (!owned.rowCount) return send(response, 404, { error: 'NOT_FOUND' });
       if (request.method === 'GET' && action === 'receipt') {
