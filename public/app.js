@@ -114,7 +114,7 @@ function renderLiveAgent(run) {
   const working = ['QUEUED','RUNNING'].includes(run.status);
   $('agent-working').hidden = !working;
   const steps = run.steps || [];
-  $('agent-model').textContent = steps.find(s=>s.model)?.model ? `GEMINI · ${steps.find(s=>s.model).model}` : 'GEMINI SHOPPING AGENT';
+  $('agent-model').textContent = steps.find(s=>s.model)?.model ? `GEMINI · ${steps.find(s=>s.model).model}` : 'SHOPPING AGENT';
   const labels = { search_resources:'Discover merchant inventory', get_resource:'Check live availability', get_policy:'Read commitment and refund terms', request_reservation:'Request an exclusive claim', start_commitment:'Prepare PayPal commitment', get_reservation_status:'Verify reservation status', release_reservation:'Release the resource', request_purchase_approval:'Request final purchase consent', wait_for_resource:'Wait for inventory to reopen', verified_payment_callback:'Receive verified PayPal result' };
   const list = $('agent-actions');
   const fingerprint=JSON.stringify([steps,working]);
@@ -151,7 +151,7 @@ async function refresh() {
     $('automation-status').textContent = policy.automation ? 'AUTOMATIC · WITHIN BUSINESS LIMITS' : 'RULES DISABLED';
     const activity = await api('/api/v1/merchant/activity'); signedIn = true;
     const business = activity.business_decisions?.find(d=>d.resource_id===RESOURCE_ID);
-    if (business) $('business-agent-result').textContent = business.status === 'COMPLETED' ? `Gemini recommended ${business.decision.action}: ${business.decision.explanation} New quote: ${money(business.decision.amount)}.` : business.status === 'FAILED' ? 'AI evaluation unavailable. The previous quote remains in effect.' : 'The business agent is evaluating observed demand…';
+    if (business) $('business-agent-result').textContent = business.status === 'COMPLETED' ? `AI recommended ${business.decision.action}: ${business.decision.explanation} New quote: ${money(business.decision.amount)}.` : business.status === 'FAILED' ? 'AI evaluation unavailable. The previous quote remains in effect.' : 'The business agent is evaluating observed demand…';
     $('login').close(); $('login').hidden = true; $('signout').hidden = false; $('connection').textContent = '● Live';
     decisions = activity.decisions.filter(d => d.resource_id === RESOURCE_ID); renderDecisions();
     for (const name of ['a', 'b']) {

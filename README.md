@@ -7,7 +7,7 @@ Resaf is a merchant-facing API for financially backed, time-limited reservations
 - A real PayPal Sandbox $2 authorization and void lifecycle has been verified with the CLI harness.
 - The captured-fee flow has also passed a live Sandbox test: $2 captured, reservation activated, early release confirmed, $1 refunded, and repeated release produced no duplicate refund record. Merchant policy version 3 now selects this fee mode. See [payment modes](docs/payment-modes.md).
 - The merchant policy API is live. Access control, idempotent updates, future scheduling, and preservation of existing quotes were checked against Render. See [merchant integration](docs/merchant-integration.md).
-- The live API has activated a reservation after verifying a real PayPal Sandbox $2 authorization. A competing buyer was rejected while it was active. Purchase checkout remains unimplemented.
+- The live API has activated a reservation after verifying a real PayPal Sandbox $2 authorization. A competing buyer was rejected while it was active. Final purchase checkout and verified receipts are implemented; a positive final-purchase Sandbox run remains to be completed.
 - The Render deployment responds at `https://resaf-api.onrender.com`. Live PostgreSQL claim concurrency and PayPal activation have been verified. A Cloudflare scheduled run automatically expired the active reservation and voided its PayPal authorization; inventory became available and the former buyer's repeat attempt was rejected by cooldown. Cleanup runs are recorded in PostgreSQL.
 
 ## Run locally
@@ -20,7 +20,7 @@ npm run db:setup
 node --env-file=.env.local server.mjs
 ```
 
-`GET /health` confirms the process is running. `GET /api/v1/resources/bag-001` reads the seeded product. `POST /api/v1/reservations` requires a bearer demo key and an `Idempotency-Key` header; it returns a five-minute, nonrenewable provisional claim and the policy's commitment quote. The two demo keys bind requests to two server-defined buyers. The caller cannot choose a buyer ID. An expired provisional claim does not trigger the repeat-hold cooldown because it never granted a financially backed reservation.
+`GET /health` confirms the process is running. `GET /api/v1/resources/demo-resource-001` reads the visible parking example. `POST /api/v1/reservations` requires a bearer demo key and an `Idempotency-Key` header; it returns a five-minute, nonrenewable provisional claim and the policy's commitment quote. The two demo keys bind requests to two server-defined buyers. The caller cannot choose a buyer ID. Unpaid claims have a short 60-second retry cooldown; financially backed holds use the accepted business cooldown.
 
 After creating a claim, the same buyer calls `POST /api/v1/reservations/{id}/commitment`. The response contains PayPal's approval URL. The PayPal return URL verifies the authorization or completed capture required by the accepted policy before activating the reservation. The buyer can also call `POST /api/v1/reservations/{id}/confirm` if the return is interrupted; both paths require the provisional claim to remain valid. `POST /api/v1/reservations/{id}/release` ends the reservation and settles the commitment using that policy. Pending settlement is reported separately from the reservation state.
 
@@ -43,3 +43,11 @@ npm run paypal:smoke -- void <authorization-id>
 ```
 
 After `create`, approve the PayPal-provided URL using a Sandbox Personal buyer. The default `PAYPAL_RETURN_URL` points to example.com and is only a placeholder for this CLI check; the order status is verified by the next command. The deployed API has a separate `/paypal/return` route for its reservation flow. The script records request IDs, provider IDs, and verified states in ignored `.local/paypal-smoke.jsonl`. Reuse a recorded `PayPal-Request-Id` for a retry after an uncertain network result.
+
+## Visible AI and purchase confirmations
+
+The main demo accepts a natural-language objective and displays actual model-selected tools as they complete. The optional business agent recommends commitment adjustments using observed demand, within merchant-approved bounds. Accepted prices and refunds remain fixed. See [agent demonstration](docs/agent-demo.md).
+
+Set `GEMINI_API_KEY` for Gemini. Optional `GROQ_API_KEY` enables a tool-calling fallback when Gemini is rate limited or temporarily unavailable (`GROQ_MODEL` defaults to `openai/gpt-oss-20b`). No provider key enters the browser or model prompt. Fallback selects model actions only; it never replays completed payment tools. Groq configuration has no effect without a valid key.
+
+After verified purchase, the UI displays a printable Sandbox confirmation with the final payment ID and separate commitment/refund totals. The receipt endpoint rejects unpaid reservations and rechecks the actual PayPal capture. A real positive final purchase test is still pending buyer approval.
