@@ -49,6 +49,7 @@ function renderDecisions() {
 function renderAgent(name, run) {
   if (!run) return;
   agents[name].run = run;
+  if (name === 'a') renderLiveAgent(run);
   const labels = { QUEUED:'REQUEST QUEUED',RUNNING:'AGENT REQUESTING',AWAITING_APPROVAL:'COMMITMENT REQUIRED',
     WAITING_FOR_AVAILABILITY:'WAITING FOR AVAILABILITY',POLICY_DENIED:'POLICY ENFORCED',FAILED:'AGENT UNAVAILABLE',COMPLETED:'REQUEST COMPLETE' };
   $('' + name + '-status').textContent = labels[run.status] || run.status.replaceAll('_', ' ');
@@ -108,6 +109,26 @@ function renderAgent(name, run) {
       refund_id: reservation.payments?.find(p=>p.provider_refund_id)?.provider_refund_id || undefined },null,2);
   }
 }
+function renderLiveAgent(run) {
+  $('agent-live').hidden = false;
+  const working = ['QUEUED','RUNNING'].includes(run.status);
+  $('agent-working').hidden = !working;
+  const steps = run.steps || [];
+  $('agent-model').textContent = steps.find(s=>s.model)?.model ? `GEMINI · ${steps.find(s=>s.model).model}` : 'GEMINI SHOPPING AGENT';
+  const labels = { search_resources:'Discover merchant inventory', get_resource:'Check live availability', get_policy:'Read commitment and refund terms', request_reservation:'Request an exclusive claim', start_commitment:'Prepare PayPal commitment', get_reservation_status:'Verify reservation status', release_reservation:'Release the resource', request_purchase_approval:'Request final purchase consent', wait_for_resource:'Wait for inventory to reopen', verified_payment_callback:'Receive verified PayPal result' };
+  const list = $('agent-actions');
+  const fingerprint=JSON.stringify([steps,working]);
+  if (list.dataset.fingerprint === fingerprint) return;
+  list.dataset.fingerprint=fingerprint; list.replaceChildren();
+  for (const [index, step] of steps.entries()) {
+    const li=document.createElement('li'), number=document.createElement('span'), body=document.createElement('div'), detail=document.createElement('small');
+    number.textContent=String(index+1).padStart(2,'0'); body.textContent=labels[step.tool] || step.tool.replaceAll('_',' ');
+    const r=step.result || {};
+    detail.textContent=[r.error || r.status || (r.waiting ? 'Resumes automatically when available' : r.approval_url ? 'Buyer consent required' : r.commitment_amount ? `Commitment ${money(r.commitment_amount, r.currency)}` : 'Backend response received'), new Date(step.occurred_at).toLocaleTimeString()].join(' · ');
+    body.append(detail); li.append(number,body); list.append(li);
+  }
+  if (!steps.length) { const li=document.createElement('li'); li.textContent=working ? 'Waiting for the model’s first tool selection…' : 'No tool calls recorded.'; list.append(li); }
+}
 async function loadAgent(name) {
   const state = agents[name];
   if (!state.run?.id) return;
@@ -115,6 +136,7 @@ async function loadAgent(name) {
   const reservationId = run.result?.reservation_id || run.steps?.find(s => s.result?.reservation_id)?.result.reservation_id;
   if (reservationId) state.reservation = await api(`/api/v1/reservations/${reservationId}`, {}, name);
   renderAgent(name, run);
+  if (state.reservation?.status === 'PURCHASED') await loadReceipt(reservationId, name);
 }
 async function refresh() {
   try {
@@ -128,6 +150,8 @@ async function refresh() {
     $('refund-terms').textContent = `Refunds: ${policy.release_refund_bps / 100}% on release · ${policy.purchase_refund_bps / 100}% after booking · ${policy.expiry_refund_bps / 100}% on expiry`;
     $('automation-status').textContent = policy.automation ? 'AUTOMATIC · WITHIN BUSINESS LIMITS' : 'RULES DISABLED';
     const activity = await api('/api/v1/merchant/activity'); signedIn = true;
+    const business = activity.business_decisions?.find(d=>d.resource_id===RESOURCE_ID);
+    if (business) $('business-agent-result').textContent = business.status === 'COMPLETED' ? `Gemini recommended ${business.decision.action}: ${business.decision.explanation} New quote: ${money(business.decision.amount)}.` : business.status === 'FAILED' ? 'AI evaluation unavailable. The previous quote remains in effect.' : 'The business agent is evaluating observed demand…';
     $('login').close(); $('login').hidden = true; $('signout').hidden = false; $('connection').textContent = '● Live';
     decisions = activity.decisions.filter(d => d.resource_id === RESOURCE_ID); renderDecisions();
     for (const name of ['a', 'b']) {
@@ -184,6 +208,13 @@ for (const el of document.querySelectorAll('[data-filter]')) el.onclick = () => 
 document.querySelector('script[src*="ag-grid"]').addEventListener('load', configureGrid);
 $('trail').addEventListener('toggle', () => { if ($('trail').open) { configureGrid(); renderDecisions(); grid?.sizeColumnsToFit(); } });
 configureGrid(); await refresh(); setInterval(refresh, 4000);
+let pollingAgent = false;
+setInterval(async () => {
+  if (pollingAgent || !signedIn) return;
+  pollingAgent = true;
+  try { for (const name of ['a','b']) if (['QUEUED','RUNNING'].includes(agents[name].run?.status)) await loadAgent(name); }
+  catch (error) { notice(error.message); } finally { pollingAgent=false; }
+}, 1200);
 $('legacy-run').onclick = async () => {
   try {
     const result = await api('/api/demo/legacy-comparison', { method: 'POST', body: JSON.stringify({ resource_id: RESOURCE_ID }) });
@@ -193,3 +224,16 @@ $('legacy-run').onclick = async () => {
     await refresh();
   } catch (error) { notice(error.message); }
 };
+async function loadReceipt(id, buyer) {
+  const receipt = await api(`/api/v1/reservations/${id}/receipt`, {}, buyer);
+  const box=$('receipt'); box.replaceChildren(); box.hidden=false;
+  const label=document.createElement('span'); label.className='eyebrow'; label.textContent='PAYPAL VERIFIED · SANDBOX';
+  const heading=document.createElement('h2'); heading.textContent=receipt.document_title;
+  const title=document.createElement('p'); title.textContent=receipt.resource;
+  const dl=document.createElement('dl');
+  for (const [key,value] of [['Merchant',receipt.merchant],['Final payment',money(receipt.amount,receipt.currency)],['Commitment collected',money(receipt.commitment_collected,receipt.currency)],['Commitment returned',money(receipt.commitment_refunded,receipt.currency)],['Settlement',receipt.settlement_status],['Payment ID',receipt.paypal_capture_id],['Confirmation',receipt.reference],['Paid at',new Date(receipt.paid_at).toLocaleString()]]) {
+    const dt=document.createElement('dt'), dd=document.createElement('dd'); dt.textContent=key; dd.textContent=value; dl.append(dt,dd);
+  }
+  const note=document.createElement('p'); note.className='caption'; note.textContent='Sandbox demonstration. This confirms test payment only and is not valid for physical entry or a real booking. Refunds shown above are confirmed; pending settlement updates automatically.';
+  box.append(label,heading,title,dl,note,button('Print confirmation',async()=>window.print()));
+}

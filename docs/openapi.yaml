@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Resaf reservation API
   version: 0.1.0
-  description: Merchant policy, PayPal-backed commitment, reservation and settlement API. Final purchase checkout is pending.
+  description: Merchant policy, PayPal-backed commitment, reservation and settlement API. Includes buyer-approved final checkout, AI runs and verified purchase receipts.
 servers:
   - url: https://resaf-api.onrender.com
 security:
@@ -175,3 +175,16 @@ paths:
       responses:
         '200': { description: PayPal commitment verified and reservation activated }
         '409': { description: Approval missing or claim ended }
+
+  /api/v1/reservations/{id}/receipt:
+    get:
+      description: Owned purchase confirmation, issued only after a completed purchase and a fresh matching PayPal capture verification. Sandbox confirmations do not grant physical access.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Verified payment receipt with separate commitment and confirmed refund totals }
+        '404': { description: Reservation does not belong to this buyer }
+        '409': { description: Purchase or payment is not verified }

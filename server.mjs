@@ -11,6 +11,8 @@ import { createAgentRun, processAgentRun, getAgentRun, resumeAgentAfterPayment }
 import { merchantSession, createDemoSession } from './src/lib/session.mjs';
 import { receiveWebhook } from './src/integrations/paypal/webhooks.mjs';
 import { legacyComparison, legacyEvidence } from './src/integrations/merchant/legacy-demo.mjs';
+import { buildReceipt } from './src/core/reservations/receipt.mjs';
+import { getCapture } from './src/integrations/paypal/client.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const merchantId = 'merchant-001';
@@ -61,7 +63,8 @@ const server = createServer(async (request, response) => {
       if (request.headers.origin !== allowed) return send(response, 403, { error: 'INVALID_ORIGIN' });
     }
     const staticFiles = { '/': ['index.html','text/html'], '/demo': ['index.html','text/html'],
-      '/app.js': ['app.js','text/javascript'], '/styles.css': ['styles.css','text/css'] };
+      '/app.js': ['app.js','text/javascript'], '/styles.css': ['styles.css','text/css'],
+      '/parking-thumbnail.png': ['parking-thumbnail.png','image/png'] };
     if (request.method === 'GET' && staticFiles[url.pathname]) {
       const [file, mime] = staticFiles[url.pathname];
       response.writeHead(200, { 'content-type': `${mime}; charset=utf-8`, 'cache-control': 'no-store',
@@ -192,7 +195,7 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === 'GET' && url.pathname === '/api/v1/merchant/activity') {
       if (!merchantAuthorized(request)) return send(response, 401, { error: 'UNAUTHORIZED' });
-      const [events, runs, policies, payments] = await Promise.all([
+      const [events, runs, policies, payments, business] = await Promise.all([
         pool.query(`SELECT e.*, r.resource_id, r.buyer_id, r.commitment_amount, r.policy_version FROM reservation_events e
           JOIN reservations r ON r.id = e.reservation_id JOIN resources i ON i.id = r.resource_id
           WHERE i.merchant_id = $1 ORDER BY e.occurred_at DESC LIMIT 200`, [merchantId]),
@@ -200,6 +203,7 @@ const server = createServer(async (request, response) => {
         pool.query(`SELECT * FROM reservation_policies WHERE merchant_id = $1 ORDER BY created_at DESC LIMIT 50`, [merchantId]),
         pool.query(`SELECT t.* FROM payment_transactions t JOIN reservations r ON r.id = t.reservation_id
           JOIN resources i ON i.id = r.resource_id WHERE i.merchant_id = $1 ORDER BY t.created_at DESC LIMIT 300`, [merchantId]),
+        pool.query(`SELECT * FROM business_agent_decisions WHERE merchant_id=$1 ORDER BY created_at DESC LIMIT 30`,[merchantId]),
       ]);
       const decisions = events.rows.map(e => ({ id: e.id, resource_id: e.resource_id, occurred_at: e.occurred_at,
         actor: e.buyer_id === 'buyer-a' ? 'Agent A' : 'Agent B', category: /PAYPAL|AUTHORIZATION|CAPTURE|COMMITMENT_SETTLED/.test(e.event_type) ? 'PAYPAL' : 'RESERVATION',
@@ -215,8 +219,11 @@ const server = createServer(async (request, response) => {
         action: p.change_source === 'automation' ? 'AUTOMATIC_PRICE_ADJUSTMENT' : 'POLICY_PUBLISHED', amount: p.commitment_amount,
         policy_version: p.version, outcome: `Effective ${new Date(p.effective_at).toISOString()}`, evidence: p });
       decisions.push(...await legacyEvidence());
+      for (const d of business.rows) decisions.push({id:`business:${d.id}`,resource_id:d.resource_id,occurred_at:d.created_at,
+        actor:'Business AI',category:'POLICY',action:'recommend_commitment',amount:d.decision?.amount,
+        outcome:d.status === 'COMPLETED' ? `${d.decision.action}: ${d.decision.explanation}` : d.status,evidence:d});
       decisions.sort((a,b) => new Date(a.occurred_at) - new Date(b.occurred_at));
-      return send(response, 200, { decisions, runs: runs.rows });
+      return send(response, 200, { decisions, runs: runs.rows, business_decisions:business.rows });
     }
     const actor = identity(request);
     if (!actor) return send(response, 401, { error: 'UNAUTHORIZED' });
@@ -256,7 +263,7 @@ const server = createServer(async (request, response) => {
       });
     }
 
-    const reservationMatch = url.pathname.match(/^\/api\/v1\/reservations\/([0-9a-f-]{36})(?:\/(events|release|commitment|confirm|purchase|confirm-purchase))?$/i);
+    const reservationMatch = url.pathname.match(/^\/api\/v1\/reservations\/([0-9a-f-]{36})(?:\/(events|receipt|release|commitment|confirm|purchase|confirm-purchase))?$/i);
     if (reservationMatch) {
       const id = reservationMatch[1];
       const action = reservationMatch[2];
@@ -290,6 +297,16 @@ const server = createServer(async (request, response) => {
       const owned = await pool.query(`SELECT r.* FROM reservations r JOIN resources i ON i.id = r.resource_id
         WHERE r.id = $1 AND r.buyer_id = $2 AND i.merchant_id = $3`, [id, actor.buyerId, merchantId]);
       if (!owned.rowCount) return send(response, 404, { error: 'NOT_FOUND' });
+      if (request.method === 'GET' && action === 'receipt') {
+        if (owned.rows[0].status !== 'PURCHASED') return send(response, 409, { error:'PURCHASE_NOT_COMPLETED' });
+        const payments = (await pool.query(`SELECT * FROM payment_transactions WHERE reservation_id = $1`, [id])).rows;
+        const payment = payments.find(p => p.type === 'PURCHASE_CAPTURE' && p.status === 'CAPTURED');
+        if (!payment?.provider_capture_id) return send(response, 409, { error:'PAYMENT_NOT_VERIFIED' });
+        const resource = (await pool.query(`SELECT i.title,i.kind,m.name AS merchant_name FROM resources i
+          JOIN merchants m ON m.id=i.merchant_id WHERE i.id=$1`, [owned.rows[0].resource_id])).rows[0];
+        const receipt = buildReceipt(owned.rows[0], resource, payments, await getCapture(payment.provider_capture_id));
+        return send(response, receipt ? 200 : 409, receipt || { error:'PAYMENT_NOT_VERIFIED' });
+      }
       if (request.method === 'GET' && !action) {
         const payments = await pool.query(`SELECT type, status, amount, currency, provider_order_id,
           provider_authorization_id, provider_capture_id, provider_refund_id FROM payment_transactions

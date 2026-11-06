@@ -30,3 +30,5 @@ INSERT INTO reservation_policies
    max_active_holds_per_buyer,repeat_cooldown_seconds,payment_mode,purchase_refund_bps,release_refund_bps,expiry_refund_bps)
 VALUES ('policy_demo_001','merchant-001','demo-resource-001',1,2.00,'USD',600,300,1,3600,'CAPTURE',10000,5000,0)
 ON CONFLICT DO NOTHING;
+
+UPDATE resources SET kind = 'parking' WHERE id = 'demo-resource-001' AND kind = 'general';

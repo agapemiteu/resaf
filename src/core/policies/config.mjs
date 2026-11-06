@@ -1,7 +1,8 @@
 import pg from 'pg';
 import { createHash, randomUUID } from 'node:crypto';
 import { ReservationError } from '../reservations/claims.ts';
-import { validateAutomation, nextCommitment, moneyCents } from './automation.mjs';
+import { validateAutomation, moneyCents } from './automation.mjs';
+import { recommendCommitment } from '../../agents/business.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 3 });
 const fields = ['commitment_amount', 'currency', 'payment_mode', 'hold_duration_seconds',
@@ -92,20 +93,32 @@ export async function evaluatePolicies() {
     FROM reservation_policies p JOIN resources r ON r.id = p.resource_id
     WHERE p.effective_at <= now() AND r.status <> 'SOLD'
     ORDER BY p.resource_id, p.effective_at DESC, p.version DESC) current
-    WHERE automation IS NOT NULL AND created_at <= now() - ((automation->>'cooldown_seconds')::int * interval '1 second') LIMIT 50`);
+    WHERE automation IS NOT NULL AND created_at <= now() - ((automation->>'cooldown_seconds')::int * interval '1 second') LIMIT 3`);
   let changed = 0;
   for (const policy of policies.rows) {
-    const demand = await pool.query(`SELECT count(*)::int AS count FROM reservations
-      WHERE resource_id = $1 AND activated_at >= now() - ($2::int * interval '1 second')`,
+    const demand = await pool.query(`SELECT count(*) FILTER (WHERE activated_at IS NOT NULL)::int AS paid_holds,
+      count(*) FILTER (WHERE activated_at IS NULL)::int AS unpaid_attempts,
+      count(*) FILTER (WHERE status = 'PURCHASED')::int AS purchases FROM reservations
+      WHERE resource_id = $1 AND requested_at >= now() - ($2::int * interval '1 second')`,
       [policy.resource_id, policy.automation.window_seconds]);
-    const amount = nextCommitment(policy, demand.rows[0].count);
-    if (amount === policy.commitment_amount) continue;
-    const input = Object.fromEntries(fields.filter(k => k !== 'effective_at').map(k => [k, policy[k]]));
-    input.commitment_amount = amount;
+    const key = `${policy.id}:${Math.floor(Date.now() / (policy.automation.cooldown_seconds * 1000))}`;
+    const evaluation = await pool.query(`INSERT INTO business_agent_decisions (merchant_id,resource_id,policy_id,evaluation_key,signals)
+      VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING id`,
+      [policy.merchant_id,policy.resource_id,policy.id,key,JSON.stringify(demand.rows[0])]);
+    if (!evaluation.rowCount) continue;
     try {
-      await createPolicy(policy.merchant_id, policy.resource_id, input, `auto:${policy.id}`, policy.id);
-      changed++;
-    } catch (error) { if (error.code !== 'POLICY_CHANGED') throw error; }
+      const decision = await recommendCommitment(policy, demand.rows[0]);
+      if (decision.amount !== policy.commitment_amount) {
+        const input = Object.fromEntries(fields.filter(k => k !== 'effective_at').map(k => [k, policy[k]]));
+        input.commitment_amount = decision.amount;
+        await createPolicy(policy.merchant_id,policy.resource_id,input,`auto:${policy.id}`,policy.id);
+        changed++;
+      }
+      await pool.query(`UPDATE business_agent_decisions SET status='COMPLETED',decision=$2 WHERE id=$1`,[evaluation.rows[0].id,JSON.stringify(decision)]);
+    } catch (error) {
+      await pool.query(`UPDATE business_agent_decisions SET status='FAILED',decision=$2 WHERE id=$1`,[evaluation.rows[0].id,JSON.stringify({error:error.message})]);
+      // A model outage leaves the previous price intact and must not stop expiration.
+    }
   }
   return changed;
 }
