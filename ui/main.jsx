@@ -4,11 +4,15 @@ import {Button,Modal,Badge} from './components/ui.jsx';
 import {selectRun,contenderRow} from '../public/agent-state.js';
 import {LiveProcess} from './components/live-process.jsx';
 import {sceneView,isRoundFinished,quotedTerms} from './scene-state.mjs';
+import {demoEntry} from './demo-entry.mjs';
 
 const money=(value,currency='USD')=>new Intl.NumberFormat('en-US',{style:'currency',currency}).format(Number(value));
 const active=['QUEUED','RUNNING'];
-const savedResource=new URLSearchParams(location.search).get('resource')||sessionStorage.getItem('resaf-active-resource');
-const initialResource=/^demo-[a-zA-Z0-9-]{1,58}$/.test(savedResource||'')?savedResource:'demo-resource-001';
+const initialResource=demoEntry(location.search);
+// Consume an explicit payment-return link once. Ordinary reloads start clean.
+const entryUrl=new URL(location.href);
+entryUrl.searchParams.delete('resource');
+history.replaceState(null,'',entryUrl.pathname+entryUrl.search+entryUrl.hash);
 localStorage.removeItem('resaf-resource');
 const defaultGoal='Secure this parking space and arrange my booking. Read the commitment and refund terms first. Request my PayPal approval for the commitment and the separate final payment.';
 const rivalGoal='Try to book the selected resource. Read its policy. If another buyer holds it, wait for availability, then reserve and request payment approval. Respect denials and never claim an unverified payment.';
@@ -114,7 +118,17 @@ function App(){
     pinned.current[name]=run;setAgents(previous=>({...previous,[name]:{run}}));return run;
   }
   async function race(terms=null){
-    const round=await api('/api/demo/rounds',{method:'POST'});
+    let round;
+    try {round=await api('/api/demo/rounds',{method:'POST'});}
+    catch(error){
+      const recover=sessionStorage.getItem('resaf-active-resource');
+      if(error.code==='ROUND_BLOCKED'&&recover&&demoEntry('?resource='+encodeURIComponent(recover))===recover){
+        focus.current=recover;activeRound.current=true;setRoundActive(true);setResourceId(recover);
+        setNotice('An earlier checkout is still open. Finish it or wait for its claim to expire.');
+        await refresh();return;
+      }
+      throw error;
+    }
     if(terms){const current=await api(`/api/v1/resources/${round.resource_id}/policy`);const fields=['commitment_amount','currency','payment_mode','hold_duration_seconds','approval_claim_seconds','max_active_holds_per_buyer','repeat_cooldown_seconds','purchase_refund_bps','release_refund_bps','expiry_refund_bps','automation'];const body=Object.fromEntries(fields.map(k=>[k,current[k]]));await api(`/api/v1/resources/${round.resource_id}/policy`,{method:'POST',body:JSON.stringify({...body,...terms})});}
     focus.current=round.resource_id;activeRound.current=true;setRoundActive(true);sessionStorage.setItem('resaf-active-resource',round.resource_id);pinned.current={};receiptRef.current=null;setCheckoutLinks({});
     setReceipt(null);setAgents({a:{},b:{}});setEdgeResult('');setResource(null);setResourceId(round.resource_id);
