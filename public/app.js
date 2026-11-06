@@ -102,7 +102,7 @@ function renderAgent(name, run) {
     if (['RELEASED','EXPIRED'].includes(state) && !commitmentPayment?.provider_capture_id && !commitmentPayment?.provider_authorization_id) $('a-result').textContent = 'The unpaid claim ended. No commitment payment was collected.';
     if (state === 'PURCHASED' && !finished) $('a-result').textContent = 'The final payment is verified and the booking is complete. The commitment settlement is still processing.';
     ['request','payment','hold','settle'].forEach((step,index) => $("step-"+step).dataset.state = index < stage || (index === 3 && finished) ? 'complete' : index === stage ? 'active' : '');
-    $('start-demo').hidden = ['QUEUED','RUNNING','AWAITING_APPROVAL','WAITING_FOR_AVAILABILITY'].includes(run.status) || ['RESERVED','PURCHASE_PENDING','PURCHASED'].includes(state);
+    $('start-demo').hidden = ['QUEUED','RUNNING','WAITING_FOR_AVAILABILITY'].includes(run.status) || ['PENDING_COMMITMENT','RESERVED','PURCHASE_PENDING','PURCHASED'].includes(state) || (run.status === 'AWAITING_APPROVAL' && !state);
     $('live-proof').hidden = !reservation;
     if (reservation) $('live-response').textContent = JSON.stringify({ reservation: state,
       payment: commitmentPayment?.status || 'NOT_PAID', capture_id: commitmentPayment?.provider_capture_id || undefined,

@@ -2,7 +2,7 @@ import pg from 'pg';
 import { ReservationError } from '../core/reservations/claims.ts';
 import { generateGroq } from './groq.mjs';
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 3 });
-const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const model = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
 const object = (properties = {}, required = []) => ({ type: 'OBJECT', properties, required });
 const string = { type: 'STRING' };
 const declarations = [

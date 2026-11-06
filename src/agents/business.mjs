@@ -11,7 +11,7 @@ export function applyRecommendation(policy, paidHolds, action) {
 
 export async function recommendCommitment(policy, signals) {
   if (!process.env.GEMINI_API_KEY && !process.env.GROQ_API_KEY) throw new Error('Business agent model is not configured.');
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const model = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
   const permitted = nextCommitment(policy, signals.paid_holds);
   const direction = Number(permitted) > Number(policy.commitment_amount) ? 'raise' : Number(permitted) < Number(policy.commitment_amount) ? 'lower' : 'keep';
   const system='You manage commitment quotes for scarce inventory. Balance access for genuine buyers with accountable agent reservations. Consider observed demand and unpaid attempts. Choose the permitted adjustment or keep. Never change refunds, existing reservations, or charge anyone. Give one brief public explanation based only on supplied observations.';
