@@ -15,7 +15,7 @@ export function contenderRow(name, run, reservation) {
   const claimed=reservation && ['PENDING_COMMITMENT','RESERVED','PURCHASE_PENDING','PURCHASED'].includes(reservation.status);
   const outcome=run?.result?.error || reservation?.status || run?.status || 'NOT_STARTED';
   return {id:name,actor:`Agent ${name.toUpperCase()}`,action:latest?.tool?.replaceAll('_',' ') || 'Awaiting mission',
-    outcome, ownership:claimed ? reservation.status==='PENDING_COMMITMENT'?'PROVISIONAL CLAIM':'VERIFIED EXCLUSIVITY' : 'NO CLAIM',
+    outcome, waiting:run?.status==='WAITING_FOR_AVAILABILITY', ownership:claimed ? reservation.status==='PENDING_COMMITMENT'?'PROVISIONAL CLAIM':'VERIFIED EXCLUSIVITY' : 'NO CLAIM',
     next:run?.status==='WAITING_FOR_AVAILABILITY'?'Wait, then retry when available':outcome==='RESOURCE_SOLD'?'Stop: resource sold':
       run?.status==='AWAITING_APPROVAL'?'Buyer approves PayPal':run?.status==='FAILED'?'Business alerted':
       outcome==='PURCHASED'?'Receipt issued':outcome==='RESERVED'?'Book or release':run?.status==='POLICY_DENIED'?'Respect policy; stop':'Agent chooses next tool',
