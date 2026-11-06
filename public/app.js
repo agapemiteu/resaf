@@ -54,7 +54,7 @@ function renderAgent(name, run) {
     WAITING_FOR_AVAILABILITY:'WAITING FOR AVAILABILITY',POLICY_DENIED:'POLICY ENFORCED',FAILED:'AGENT UNAVAILABLE',COMPLETED:'REQUEST COMPLETE' };
   $('' + name + '-status').textContent = labels[run.status] || run.status.replaceAll('_', ' ');
   const last = run.steps?.at(-1);
-  $(name + '-result').textContent = run.result?.summary?.split('\n')[0] || run.result?.error ||
+  $(name + '-result').textContent = run.result?.error ||
     (last ? `${last.tool.replaceAll('_', ' ')}\n${last.result.error || last.result.status || (last.result.waiting ? 'Waiting for inventory. This run resumes automatically.' : 'Tool result recorded in the ledger.')}` : 'Agent is queued…');
   const controls = $(name + '-controls'); controls.replaceChildren();
   const reservation = agents[name].reservation;
@@ -81,6 +81,7 @@ function renderAgent(name, run) {
   }
   if (name === 'a') {
     const state = reservation?.status;
+    if (!state && run.status === 'COMPLETED') $('a-result').textContent = 'The agent completed its inspection. Its actual tool calls are shown below; the current commitment and refund terms are displayed above.';
     const statuses = { PENDING_COMMITMENT:'COMMITMENT REQUIRED',RESERVED:'RESERVATION ACTIVE',PURCHASE_PENDING:'FINAL PAYMENT REQUIRED',
       PURCHASED:'BOOKING COMPLETE',RELEASED:'RESOURCE RELEASED',EXPIRED:'HOLD EXPIRED',FAILED:'RESERVATION ENDED' };
     if (state) $('a-status').textContent = statuses[state] || state;
@@ -124,7 +125,7 @@ function renderLiveAgent(run) {
     const li=document.createElement('li'), number=document.createElement('span'), body=document.createElement('div'), detail=document.createElement('small');
     number.textContent=String(index+1).padStart(2,'0'); body.textContent=labels[step.tool] || step.tool.replaceAll('_',' ');
     const r=step.result || {};
-    detail.textContent=[r.error || r.status || (r.waiting ? 'Resumes automatically when available' : r.approval_url ? 'Buyer consent required' : r.commitment_amount ? `Commitment ${money(r.commitment_amount, r.currency)}` : 'Backend response received'), new Date(step.occurred_at).toLocaleTimeString()].join(' · ');
+    detail.textContent=[r.error || r.status || (r.waiting ? 'Resumes automatically when available' : r.approval_url ? 'Buyer consent required' : r.commitment_amount ? `Commitment ${money(r.commitment_amount, r.currency)} ? ${r.release_refund_bps / 100}% returned on release ? ${r.purchase_refund_bps / 100}% of commitment returned after purchase` : 'Backend response received'), new Date(step.occurred_at).toLocaleTimeString()].join(' · ');
     body.append(detail); li.append(number,body); list.append(li);
   }
   if (!steps.length) { const li=document.createElement('li'); li.textContent=working ? 'Waiting for the model’s first tool selection…' : 'No tool calls recorded.'; list.append(li); }

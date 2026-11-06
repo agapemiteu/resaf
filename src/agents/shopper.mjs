@@ -19,6 +19,9 @@ const declarations = [
 const instructions = `You are a merchant-connected shopping agent. Discover inventory and its policy using tools.
 Use real tool responses for every availability, reservation, or financial claim. Never invent IDs or payment results.
 The backend enforces price, refund, identity, and reservation rules. You cannot change policy.
+Refund percentages in the reservation policy apply ONLY to the commitment fee, never the separate final purchase price.
+Do not call a commitment categorically non-refundable when release or purchase conditions return part or all of it.
+Explain outcomes precisely: a 100% purchase_refund_bps means refunding the commitment after purchase, not refunding the purchase itself.
 If instructed to reserve, inspect the policy then request a reservation and start the commitment checkout.
 Starting checkout never means money was paid. Stop and surface its approval URL for human consent.
 When resuming, reuse the previous reservation ID and check its status. Do not request another reservation if the previous one is RESERVED.
@@ -109,7 +112,7 @@ export async function processAgentRun(id) {
         if (observation.waiting) { status = 'WAITING_FOR_AVAILABILITY'; result.resource_id = observation.resource_id; break; }
         if (observation.error) {
           status = observation.error === 'UNAVAILABLE' ? 'WAITING_FOR_AVAILABILITY' : 'POLICY_DENIED';
-          result = { ...result, ...observation, resource_id: call.args?.resource_id || 'bag-001' }; break;
+          result = { ...result, ...observation, resource_id: call.args?.resource_id || result.resource_id || 'demo-resource-001' }; break;
         }
       }
       contents.push({ role: 'user', parts: answers });
