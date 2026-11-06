@@ -135,3 +135,11 @@ export async function processWaitingAgents() {
 export async function getAgentRun(id, buyerId) {
   return (await pool.query(`SELECT * FROM agent_runs WHERE id = $1 AND buyer_id = $2 AND merchant_id = 'merchant-001'`, [id, buyerId])).rows[0] || null;
 }
+
+export async function resumeAgentAfterPayment(id, buyerId, result, purchase) {
+  const resumed = await pool.query(`UPDATE agent_runs SET status = $3, result = $4,
+    steps = steps || $5::jsonb, updated_at = now() WHERE buyer_id = $1 AND result->>'reservation_id' = $2
+    AND status = 'AWAITING_APPROVAL' RETURNING id`, [buyerId, id, purchase ? 'COMPLETED' : 'QUEUED', JSON.stringify(result),
+      JSON.stringify([{ tool: 'verified_payment_callback', result, occurred_at: new Date().toISOString() }])]);
+  if (!purchase) for (const run of resumed.rows) void processAgentRun(run.id).catch(error => console.error('Agent resume failed:', error.message));
+}

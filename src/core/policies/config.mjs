@@ -44,7 +44,7 @@ export function validatePolicy(body) {
 export async function currentPolicy(merchantId, resourceId) {
   const result = await pool.query(`SELECT * FROM reservation_policies WHERE merchant_id = $1
     AND resource_id = $2 AND effective_at <= now() ORDER BY effective_at DESC, version DESC LIMIT 1`, [merchantId, resourceId]);
-  return result.rows[0] ?? null;
+  return result.rows[0] ? { ...result.rows[0], approval_retry_cooldown_seconds: 60 } : null;
 }
 
 export async function createPolicy(merchantId, resourceId, body, requestKey, expectedPolicyId) {

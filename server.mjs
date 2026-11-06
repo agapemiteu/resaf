@@ -7,8 +7,9 @@ import { startCommitment, confirmCommitment, voidOutstanding, verifyCallback } f
 import { runExpirationSweep } from './src/core/reservations/sweep.mjs';
 import { currentPolicy, createPolicy } from './src/core/policies/config.mjs';
 import { startPurchase, confirmPurchase } from './src/core/reservations/purchase.mjs';
-import { createAgentRun, processAgentRun, getAgentRun } from './src/agents/shopper.mjs';
+import { createAgentRun, processAgentRun, getAgentRun, resumeAgentAfterPayment } from './src/agents/shopper.mjs';
 import { merchantSession, createDemoSession } from './src/lib/session.mjs';
+import { receiveWebhook } from './src/integrations/paypal/webhooks.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 });
 const merchantId = 'merchant-001';
@@ -82,6 +83,10 @@ const server = createServer(async (request, response) => {
       }
     }
     if (request.method === 'GET' && url.pathname === '/health') return send(response, 200, { ok: true });
+    if (request.method === 'POST' && url.pathname === '/api/webhooks/paypal') {
+      const accepted = await receiveWebhook(request.headers, await readBody(request));
+      return send(response, accepted ? 200 : 401, { accepted });
+    }
     if (['GET', 'POST'].includes(request.method) && url.pathname === '/internal/expire') {
       const bearer = request.headers.authorization?.match(/^Bearer ([^\s]+)$/)?.[1];
       const secret = process.env.CRON_SECRET;
@@ -120,12 +125,7 @@ const server = createServer(async (request, response) => {
           try {
             const purchase = url.searchParams.get('action') === 'purchase';
             const result = purchase ? await confirmPurchase(id, buyerId, orderId) : await confirmCommitment(id, buyerId, orderId);
-            const resumed = await pool.query(`UPDATE agent_runs SET status = $3, result = $4,
-              steps = steps || $5::jsonb, updated_at = now() WHERE buyer_id = $1 AND result->>'reservation_id' = $2
-              AND status = 'AWAITING_APPROVAL' RETURNING id`,
-              [buyerId, id, purchase ? 'COMPLETED' : 'QUEUED', JSON.stringify(result),
-                JSON.stringify([{ tool: 'verified_payment_callback', result, occurred_at: new Date().toISOString() }])]);
-            if (!purchase) for (const run of resumed.rows) void processAgentRun(run.id).catch(error => console.error('Agent resume failed:', error.message));
+            await resumeAgentAfterPayment(id, buyerId, result, purchase);
             heading = purchase ? 'Purchase confirmed' : 'Reservation active';
             message = purchase ? 'PayPal purchase verified. Inventory is sold; the commitment is being settled under your accepted terms.' : `PayPal commitment verified. Reservation expires at ${new Date(result.expires_at).toUTCString()}.`;
           } catch (error) {
@@ -268,6 +268,9 @@ const server = createServer(async (request, response) => {
         let paymentStatus = null;
         try { paymentStatus = await voidOutstanding(id); }
         catch { paymentStatus = 'SETTLEMENT_PENDING'; }
+        if (['RELEASED','EXPIRED'].includes(claim.status)) await pool.query(`UPDATE agent_runs SET status='COMPLETED',
+          result=$3, updated_at=now() WHERE buyer_id=$1 AND result->>'reservation_id'=$2 AND status='AWAITING_APPROVAL'`,
+          [actor.buyerId,id,JSON.stringify({ reservation_id:id,status:claim.status,payment_status:paymentStatus })]);
         return send(response, ['SETTLEMENT_PENDING', 'REFUND_PENDING', 'CAPTURE_PENDING'].includes(paymentStatus) ? 202 : 200,
           { reservation_id: claim.id, status: claim.status, payment_status: paymentStatus });
       }

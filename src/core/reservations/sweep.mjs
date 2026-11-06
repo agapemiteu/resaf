@@ -5,10 +5,12 @@ import { reconcileFeeCaptures } from './fees.mjs';
 import { evaluatePolicies } from '../policies/config.mjs';
 import { reconcilePurchases } from './purchase.mjs';
 import { processWaitingAgents } from '../../agents/shopper.mjs';
+import { processWebhookEvents } from '../../integrations/paypal/webhooks.mjs';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
 
 export async function runExpirationSweep() {
+  await processWebhookEvents();
   const purchaseErrors = await reconcilePurchases();
   let expired = 0;
   let batch;

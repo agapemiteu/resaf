@@ -100,8 +100,8 @@ export async function requestApprovalClaim(input: ClaimRequest) {
     }
 
     const cooldown = await client.query(`SELECT id FROM reservations WHERE resource_id = $1 AND buyer_id = $2
-      AND status IN ('EXPIRED', 'RELEASED') AND activated_at IS NOT NULL
-      AND ended_at > now() - ($3::integer * interval '1 second') LIMIT 1`,
+      AND status IN ('EXPIRED', 'RELEASED')
+      AND ended_at > now() - ((CASE WHEN activated_at IS NULL THEN 60 ELSE $3::integer END) * interval '1 second') LIMIT 1`,
       [input.resourceId, input.buyerId, policy.repeat_cooldown_seconds]);
     if (cooldown.rowCount) throw new ReservationError('COOLDOWN', 'Buyer must wait before claiming this resource again.');
 

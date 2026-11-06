@@ -1,0 +1,10 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { ensureWebhook } from '../src/integrations/paypal/client.mjs';
+const webhook = await ensureWebhook('https://resaf-api.onrender.com/api/webhooks/paypal');
+if (!webhook.id) throw new Error('PayPal did not return a webhook ID.');
+const file = new URL('../.env.local', import.meta.url);
+let env = await readFile(file, 'utf8');
+if (/^PAYPAL_WEBHOOK_ID=/m.test(env)) env = env.replace(/^PAYPAL_WEBHOOK_ID=.*$/m, `PAYPAL_WEBHOOK_ID=${webhook.id}`);
+else env += `\nPAYPAL_WEBHOOK_ID=${webhook.id}\n`;
+await writeFile(file, env);
+console.log(JSON.stringify({ webhook_id: webhook.id, url: webhook.url, configured_locally: true }));

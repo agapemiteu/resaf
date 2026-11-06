@@ -141,3 +141,26 @@ export async function refundCapture({ captureId, operationKey, amount, currency 
 export async function getRefund(refundId) {
   return request(`/v2/payments/refunds/${encodeURIComponent(refundId)}`);
 }
+
+export async function ensureWebhook(url) {
+  const existing = await request('/v1/notifications/webhooks');
+  const found = existing.webhooks?.find(item => item.url === url);
+  if (found) return found;
+  return request('/v1/notifications/webhooks', { method: 'POST', body: { url, event_types:
+    ['CHECKOUT.ORDER.APPROVED','PAYMENT.CAPTURE.COMPLETED','PAYMENT.CAPTURE.REFUNDED','PAYMENT.AUTHORIZATION.VOIDED'].map(name => ({ name })) } });
+}
+
+export async function verifyWebhook(headers, event) {
+  if (!process.env.PAYPAL_WEBHOOK_ID) throw new Error('PayPal webhook ID is not configured.');
+  const names = ['paypal-auth-algo','paypal-cert-url','paypal-transmission-id','paypal-transmission-sig','paypal-transmission-time'];
+  if (names.some(name => typeof headers[name] !== 'string')) return false;
+  let certificate;
+  try { certificate = new URL(headers['paypal-cert-url']); } catch { return false; }
+  if (certificate.protocol !== 'https:' || !/(^|\.)paypal\.com$/i.test(certificate.hostname)) return false;
+  const result = await request('/v1/notifications/verify-webhook-signature', { method: 'POST', body: {
+    auth_algo: headers['paypal-auth-algo'], cert_url: headers['paypal-cert-url'],
+    transmission_id: headers['paypal-transmission-id'], transmission_sig: headers['paypal-transmission-sig'],
+    transmission_time: headers['paypal-transmission-time'], webhook_id: process.env.PAYPAL_WEBHOOK_ID, webhook_event: event,
+  } });
+  return result.verification_status === 'SUCCESS';
+}
