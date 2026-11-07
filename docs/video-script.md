@@ -27,55 +27,63 @@ Sources: [Official rules](https://paypalaihackathon.devpost.com/rules), [submiss
 
 Economic illustration if needed in supporting text: ten unfilled $25 booking slots represent $250 of potential booking revenue. Label this hypothetical. A temporary hold does not necessarily cause a permanent lost sale. No verified worldwide loss or affected-person total attributable specifically to AI reservation agents was found in these sources.
 
-## Narration and shot list
+## Positioning
 
-### 0:00–0:16 — Start with the buyer
+Lead with: **Resaf � an AI reservation agent for businesses, backed by PayPal.**
 
-Visual: original animation of one parking space, a human requesting it, and an automated client holding it. Only three labels: Available → Held → Buyer blocked. This is an illustration, not footage of a deployed parking operator.
+The agent coordinates reservation and commitment workflows; the API is how businesses and other agents integrate it. Merchant policies and financial verification remain enforced by deterministic server code. This framing does not imply a new generic shopping assistant or unattended buyer payments.
 
-> The space exists. The buyer is ready. But they cannot book it—because an automated shopper keeps holding it without buying. Faster agents can turn a useful reservation into a barrier for everyone else.
+CrawlerPal precedent: [PayPal calls it a paywall AI agent assistant](https://developer.paypal.com/community/blog/winners-dev-days-hackathon/); its [repository](https://github.com/positiveblue/CrawlerPal) implements a server, payment offers, and a programmatic client. Agent-facing presentation and reusable infrastructure coexist.
 
-### 0:16–0:34 — Establish credible pain
+## Stronger U.S. pain evidence
 
-Visual: original, uncluttered statistic cards: “4× no-shows” and “2× late cancellations.” Small credit: “Resy · bots and brokers · Apr–Oct 2024.” No copied article screenshot.
+- [The Atlantic, July 1, 2024](https://www.theatlantic.com/technology/archive/2024/07/restaurant-reservation-resy-tock-american-express/678862/): reported one New York steakhouse lost $10,000 in one night through cancellations/no-shows in a bot-problem context. This is a reported individual case, not an audited industry total or an LLM-agent loss estimate.
+- [National Restaurant Association, April 24, 2025](https://restaurant.org/research-and-media/media/press-releases/access-denied-the-rise-of-black-market-reservations-disrupting-the-restaurant-dining-experience/): Monteverde co-owner Rob Mosher describes guests encountering no availability and believing they cannot get a table. Commander's Palace general manager Steve Woodruff describes resale making dining more expensive and frustrating.
+- [Morning Consult polling memo](https://restaurant.org/getmedia/0ae539a9-dad8-4cf4-8be6-b50f6fc8f8fb/Restaurant-Reservation-Polling-Memo.pdf): 2,200 U.S. adults, August 16�18, 2024; 72% concerned reservation resale puts restaurants out of reach; 70% concerned about financial harm through no-shows. These are opinions, not observed victim counts.
+- [New York Governor's announcement, December 19, 2024](https://www.governor.ny.gov/news/bon-appetit-governor-hochul-signs-legislation-cracking-down-black-market-restaurant): legislation followed unauthorized resale problems. The NYC Hospitality Alliance described lost money for businesses and workers when reservations do not sell and tables go empty. Use as dated context; do not claim legislation or deposits solve every form of abuse.
+- Resy's 4� no-show and 2� late-cancellation evidence above remains the main comparative figure. Traditional bot abuse predates current LLM agents; agentic shopping increases the relevance of the problem, not proof of its entire economic cause.
 
-> This pressure is already visible in reservations. Resy reports that bot and broker bookings had four times the no-show rate and twice the late-cancellation rate of ordinary users. AI shopping agents make repeated, unattended reservation attempts easier to automate.
+## Revised narration and shot list
 
-### 0:34–0:52 — Introduce the mechanism
+### 0:00�0:17 � Human pain
+Visual: original available/held/empty-table illustration. Caption: �Unavailable online. Empty in person.� Clearly an illustration.
 
-Visual: Resaf title, then the actual running application. Show commitment, hold duration and refund terms; briefly open Terms.
+> A customer cannot get a table. The restaurant has empty seats. A bot reserved them, hoping to sell the booking. If nobody buys, the customer misses dinner�and the restaurant loses the sale.
 
-> Resaf is a PayPal-backed reservation API for businesses and developers. A temporary hold requires a disclosed financial commitment, a fixed deadline, and repeat limits. The business decides how much comes back after purchase, release, or expiry.
+### 0:17�0:39 � Dollars and measured behavior
+Visual: separate $10,000 reported-case and 4� relative-rate cards, each with date/source. Never combine them into a claimed industry loss.
 
-### 0:52–1:15 — Show genuine AI competition
+> The Atlantic reported a New York steakhouse losing ten thousand dollars in one night from cancellations and no-shows. Resy's own data found bot and broker bookings had four times the no-show rate of ordinary users. Faster AI agents make repeated holds easier to automate.
 
-Visual: press Run; show actual model/tool activity on the side. Open Race briefly to show the two backend outcomes in AG Grid. Follow whichever agent actually wins.
+### 0:39�0:57 � Agent-first introduction
+Visual: Resaf + one-line positioning. Move straight into running application and accepted terms.
 
-> Here is one parking space and two independent AI shoppers. Both discover it, read the terms, and request access through our API. Watch their live tool calls. One gets a short payment-approval claim; the other waits. The paid reservation begins only after PayPal verification.
+> Meet Resaf: an AI reservation agent for businesses, backed by PayPal. It coordinates temporary reservations with a financial commitment. Businesses control the price, deadline, repeat limits, and what gets refunded. Access has responsibility; completing the booking can earn the commitment back.
 
-### 1:15–1:38 — Make PayPal essential
+### 0:57�1:20 � Actual competition
+Visual: Run, actual model-selected HTTP tools, then AG Grid's real contention outcomes. No predetermined winner.
 
-Visual: real Sandbox approval, then verified reservation state. Keep “PayPal Sandbox · test funds” legible. Cut or speed up login/wait time with a clear label; do not fabricate result frames.
+> Here, two real AI shoppers compete for one parking space. They discover it, inspect the policy, and request access. One receives a short checkout claim. The other waits. These are actual model-selected tool calls and server responses. A claim becomes a paid reservation only after verified payment.
 
-> This demo collects a two-dollar commitment through PayPal Sandbox. The buyer approves; Resaf verifies the completed payment and stores its transaction ID before activating the hold. Changing an agent name cannot bypass the buyer's reservation limits.
+### 1:20�1:40 � PayPal financial proof
+Visual: actual Sandbox commitment approval/capture and reserved state. Label edited login/wait time.
 
-### 1:38–2:00 — Explain adaptation and failure
+> The buyer approves a two-dollar commitment in PayPal Sandbox. Resaf verifies the payment, records its transaction ID, and activates the timed reservation. Payment approval is explicit. Repeated holds cannot bypass the business rules simply by changing an agent's name.
 
-Visual: show the real Business bounds control. Only show an automatic price decision if an actual recorded evaluation exists. Briefly show an existing real denial or label the failure drill “Simulated timeout.”
+### 1:40�2:00 � Adaptation and unhappy paths
+Visual: real Business bounds; genuine denial/recovery status. Do not fabricate automatic price decisions. Label any failure drill as simulated.
 
-> Businesses can set bounds for AI-assisted commitment pricing. New quotes can rise or fall with demand; existing refund promises stay fixed. If a request fails, the agent waits, stops, or flags the business. Expiration releases inventory automatically; refunds follow the accepted policy.
+> The business agent can recommend higher or lower commitments within approved bounds. Accepted prices and refund promises stay fixed. If another buyer owns the space, our shoppers wait. If a tool fails, the run stops safely and flags the business. Expired holds release automatically.
 
-### 2:00–2:29 — Prove the commercial result
+### 2:00�2:28 � Verified outcome
+Visual: separate $25 PayPal purchase; confirmed $2 refund; actual Sandbox receipt. Same round throughout. Leave space for amounts to be read.
 
-Visual: separate real $25 Sandbox booking approval. Show actual capture confirmation and $2 refund confirmation, then the verified Sandbox receipt. Pause long enough to read the amounts. Never state a refund completed while its status is pending.
+> Now the buyer completes the separate twenty-five-dollar booking. PayPal confirms payment. The resource becomes sold. This policy refunds the full two-dollar commitment, and the receipt shows the verified outcome. One successful buyer. No double booking. A financial trail the business can inspect.
 
-> Now the buyer completes the separate twenty-five-dollar booking. PayPal confirms payment, the resource becomes sold, and this policy returns the full two-dollar commitment. The receipt shows the verified payment and refund. One unit, one successful buyer, and a traceable financial outcome.
+### 2:28�2:50 � Integration and close
+Visual: live API request/response, then original parking/room/table symbols as potential applications. End card with Resaf and tagline.
 
-### 2:29–2:50 — Show the API and close
-
-Visual: /developers → Send live request → actual HTTP response → downloadable API contract. Finish with a simple Resaf end card. Optional tiny text credits for Render, AG Grid and available Postman collection; do not claim unimplemented sponsor integrations.
-
-> Developers integrate the reservation API with their own inventory and checkout. We demonstrate parking; the same pattern could support hotel rooms, restaurant tables, or scarce products. Resaf makes temporary exclusivity accountable—so agents can reserve, businesses set the rules, and other buyers get another chance. Information is free. Scarcity isn't.
+> Businesses connect Resaf through its API to their own inventory and checkout. Today we demonstrate parking; the same approach could support rooms, tables, and scarce products. Resaf makes temporary access financially accountable, while keeping legitimate agent bookings possible. Information is free. Scarcity isn't.
 
 ## Recording notes
 
