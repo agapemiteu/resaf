@@ -2,7 +2,7 @@
 
 [Live demo](https://resaf-api.onrender.com) ? [Try the API](https://resaf-api.onrender.com/developers) ? [OpenAPI](https://resaf-api.onrender.com/openapi.yaml) ? [Postman collection](https://resaf-api.onrender.com/postman.json)
 
-Resaf is a merchant-facing API for financially backed, time-limited reservations requested by shopping agents. The demo uses one scarce product. Merchant policy and PayPal verification, rather than the agent, determine whether exclusivity is granted.
+Resaf is an AI reservation agent for businesses, backed by PayPal. It coordinates timed reservations, financial commitments, and policy-based refunds. Developers connect it to their inventory and checkout through its API. The demo uses two AI shoppers competing for one parking space; server-enforced business rules and verified PayPal results govern access and payments.
 
 ## Current status
 
