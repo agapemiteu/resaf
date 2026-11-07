@@ -16,7 +16,7 @@ export function EvidenceGrid({rows,type='race',onSelect,connected=true}){
     const columns=race?[
       {field:'actor',headerName:'Buyer',width:142,pinned:'left',lockPinned:true,cellRenderer:buyer},
       {colId:'timeline',headerName:'Timeline',width:144,sortable:false,cellRenderer:timeline},
-      {field:'statusLabel',headerName:'Status',minWidth:150,flex:1,cellRenderer:p=>textCell(p.value,`grid-pill tone-${p.data.tone}`)},
+      {field:'statusLabel',headerName:'Status',minWidth:120,flex:1,cellRenderer:p=>textCell(p.value,`grid-pill tone-${p.data.tone}`)},
       {field:'next',headerName:'Next action',minWidth:190,flex:1},
     ]:[{field:'actor',headerName:'Actor',width:130},{field:'action',headerName:'Event',minWidth:210,flex:1,valueFormatter:p=>readable(p.value)},{field:'outcome',headerName:'Result',minWidth:180,flex:1,valueFormatter:p=>readable(p.value)}];
     try{
@@ -24,6 +24,7 @@ export function EvidenceGrid({rows,type='race',onSelect,connected=true}){
         theme:window.agGrid.themeQuartz.withParams({fontFamily:'system-ui,-apple-system,sans-serif',fontSize:13,headerFontSize:12,backgroundColor:'#1d2735',foregroundColor:'#edf2fa',borderColor:'#354152',accentColor:'#65acff',headerBackgroundColor:'#273344',headerTextColor:'#b7c3d4',rowHoverColor:'#25354b',cellHorizontalPadding:16,borderRadius:12}),
         columnDefs:[...columns,{colId:'details',headerName:'',width:72,sortable:false,resizable:false,cellRenderer:detail}],
         defaultColDef:{resizable:true,sortable:true,suppressMovable:true},getRowId:p=>p.data.id,
+        onGridSizeChanged:params=>{if(!race)return;const compact=container.current.clientWidth<560;params.api.setColumnsVisible(['timeline','next'],!compact);params.api.setColumnWidths([{key:'actor',newWidth:compact?108:142},{key:'details',newWidth:compact?56:72}]);},
         rowHeight:race?68:48,headerHeight:44,animateRows:!window.matchMedia('(prefers-reduced-motion: reduce)').matches,
         rowClassRules:{'race-row-reserved':p=>p.data.tone==='reserved'||p.data.tone==='booked','race-row-claim':p=>p.data.tone==='claim','race-row-error':p=>p.data.tone==='error'},
         tooltipShowDelay:300,ariaLabel:race?'Competing reservation requests':'Reservation event ledger',

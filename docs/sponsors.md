@@ -6,8 +6,8 @@ The required combination is PayPal Sandbox and meaningful AI. Sponsor tools are 
 |---|---|---|
 | Render | Host the app and PostgreSQL database in one platform. | Live app and database; independent expiration is triggered through Cloudflare. |
 | Postman | Publish and exercise the merchant-facing reservation API. | 12-request, 20-assertion collection runs through Newman in GitHub Actions. Run 42386090051 passed with zero failures; see postman.md. |
-| APIMatic | Generate developer-facing SDK/docs from Resaf's OpenAPI contract and use its PayPal API context plugin. | OpenAPI contract is ready. Actual SDK generation is pending account authentication (APIMATIC_API_KEY); no generated SDK or portal is claimed. |
-| Channel3 | External product discovery for shopping agents. | Skip for the one-product merchant demo; merchant catalog is authoritative. |
+| APIMatic | Generate developer-facing SDK/docs from Resaf's OpenAPI contract and use its PayPal API context plugin. | Skip by product scope. No generated SDK or portal is claimed. |
+| Channel3 | External product discovery for shopping agents. | Skip by product scope. Resaf manages business reservations; it does not search for products to buy. |
 | AG Grid | Interactive ledger of competing reservation attempts, policy versions, PayPal verification, and inventory outcomes. | Live current-run competition view, with actual server outcomes and expandable evidence. |
 | Bryntum | Visualize reservation windows and policy changes on a timeline. | Skip; Cloudflare handles the actual expiration trigger and AG Grid will cover the demo's event view. Bryntum Scheduler is a UI component, not a backend cron service. |
 | Elastic | Search and agent retrieval. | Skip; one product does not need a search cluster. |
