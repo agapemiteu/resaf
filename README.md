@@ -27,7 +27,7 @@ node --env-file=.env.local server.mjs
 
 After creating a claim, the same buyer calls `POST /api/v1/reservations/{id}/commitment`. The response contains PayPal's approval URL. The PayPal return URL verifies the authorization or completed capture required by the accepted policy before activating the reservation. The buyer can also call `POST /api/v1/reservations/{id}/confirm` if the return is interrupted; both paths require the provisional claim to remain valid. `POST /api/v1/reservations/{id}/release` ends the reservation and settles the commitment using that policy. Pending settlement is reported separately from the reservation state.
 
-The current API contract is [docs/openapi.yaml](docs/openapi.yaml), ready for Postman and APIMatic import. A [Postman collection](docs/postman.collection.json) checks discovery and unauthenticated-write rejection without financial operations. Its runner could not install in this environment because the npm registry connection was refused; the same API behavior was verified directly. APIMatic-generated SDKs have not yet been published. The sponsor decision is in [docs/sponsors.md](docs/sponsors.md).
+The current API contract is [docs/openapi.yaml](docs/openapi.yaml), ready for Postman and APIMatic import. The [Postman collection](docs/postman.collection.json) runs 12 live HTTP requests and 20 assertions covering discovery, terms and access protection without financial operations. Its GitHub Actions Newman run passed with zero failures; see [test instructions and evidence](docs/postman.md). APIMatic-generated SDKs have not yet been published. The sponsor decision is in [docs/sponsors.md](docs/sponsors.md).
 
 ## Render
 
