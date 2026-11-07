@@ -1,33 +1,348 @@
 {
   "info": {
-    "name": "Resaf policy discovery and access checks",
-    "description": "Safe checks: reads current policy and verifies unauthenticated writes fail. Does not create payments or modify policies.",
+    "name": "Resaf - live API contract checks",
+    "description": "Runs real discovery, commitment-term and access-boundary checks. Creates only a temporary demo session. No AI inference, reservations, payments, refunds, or policy changes.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "variable": [{ "key": "base_url", "value": "https://resaf-api.onrender.com" }],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://resaf-api.onrender.com"
+    }
+  ],
   "item": [
     {
-      "name": "Discover resource",
-      "request": { "method": "GET", "url": "{{base_url}}/api/v1/resources/bag-001" },
-      "event": [{ "listen": "test", "script": { "exec": [
-        "pm.test('Resource is available through API', () => pm.response.to.have.status(200));",
-        "pm.test('Resource has inventory state', () => pm.expect(pm.response.json().status).to.be.a('string'));"
-      ] } }]
+      "name": "Service health",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/health",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => { pm.response.to.have.status(200); });",
+              "pm.test(\"Service is ready\", () => { pm.expect(pm.response.json().ok).to.eql(true); });"
+            ]
+          }
+        }
+      ]
     },
     {
-      "name": "Discover effective policy",
-      "request": { "method": "GET", "url": "{{base_url}}/api/v1/resources/bag-001/policy" },
-      "event": [{ "listen": "test", "script": { "exec": [
-        "pm.test('Policy discovery is free', () => pm.response.to.have.status(200));",
-        "pm.test('Terms include commitment and refund rules', () => { const p = pm.response.json(); pm.expect(p.commitment_amount).to.match(/^\\d+\\.\\d{2}$/); pm.expect(p.release_refund_bps).to.be.within(0, 10000); });"
-      ] } }]
+      "name": "Discover parking resource",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/v1/resources/demo-resource-001",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => { pm.response.to.have.status(200); });",
+              "pm.test(\"Resource exposes inventory state\", () => { const r=pm.response.json(); pm.expect(r.resource_id||r.id).to.eql('demo-resource-001'); pm.expect(r.status).to.be.a('string'); });"
+            ]
+          }
+        }
+      ]
     },
     {
-      "name": "Reject unauthenticated policy write",
-      "request": { "method": "POST", "url": "{{base_url}}/api/v1/resources/bag-001/policy" },
-      "event": [{ "listen": "test", "script": { "exec": [
-        "pm.test('Merchant credentials are required', () => pm.response.to.have.status(401));"
-      ] } }]
+      "name": "Read commitment and refund policy",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/v1/resources/demo-resource-001/policy",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => { pm.response.to.have.status(200); });",
+              "pm.test(\"Commitment is exact decimal money\", () => { pm.expect(pm.response.json().commitment_amount).to.match(/^\\d+\\.\\d{2}$/); });",
+              "pm.test(\"Refunds are disclosed\", () => { const p=pm.response.json(); ['purchase_refund_bps','release_refund_bps','expiry_refund_bps'].forEach(k=>pm.expect(p[k]).to.be.within(0,10000)); });",
+              "pm.test(\"Hold has a server-defined duration\", () => { pm.expect(pm.response.json().hold_duration_seconds).to.be.above(0); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reject unauthenticated reservation",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/api/v1/reservations",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"resource_id\":\"demo-resource-001\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", () => { pm.response.to.have.status(401); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reject unauthenticated policy change",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/api/v1/resources/demo-resource-001/policy",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", () => { pm.response.to.have.status(401); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Open public Sandbox without merchant key",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/api/demo/session",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => { pm.response.to.have.status(200); });",
+              "pm.test(\"Session is established\", () => { pm.expect(pm.response.json().signed_in).to.eql(true); });",
+              "pm.test(\"Cookie is not accessible to browser scripts\", () => { pm.expect(pm.response.headers.get('set-cookie')).to.include('HttpOnly'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Public session starts without saved activity",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/v1/merchant/activity",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => { pm.response.to.have.status(200); });",
+              "pm.test(\"Previous runs and payment history are hidden\", () => { const r=pm.response.json(); pm.expect(r.runs).to.eql([]); pm.expect(r.decisions).to.eql([]); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Demo cannot change merchant template",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/api/v1/resources/demo-resource-001/policy",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", () => { pm.response.to.have.status(401); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Demo cannot control expiration worker",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/internal/expire",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 401\", () => { pm.response.to.have.status(401); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Demo cannot act on another resource",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/api/v1/agents/runs",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Demo-Buyer",
+            "value": "a"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{$guid}}"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"resource_id\":\"bag-001\",\"objective\":\"Read only\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 404\", () => { pm.response.to.have.status(404); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Demo cannot retrieve unrelated reservations",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/v1/reservations/00000000-0000-0000-0000-000000000001",
+        "header": [
+          {
+            "key": "X-Demo-Buyer",
+            "value": "a"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 404\", () => { pm.response.to.have.status(404); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Close test session",
+      "request": {
+        "method": "DELETE",
+        "url": "{{base_url}}/api/demo/session",
+        "header": []
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"HTTP 200\", () => { pm.response.to.have.status(200); });"
+            ]
+          }
+        }
+      ]
     }
   ]
 }

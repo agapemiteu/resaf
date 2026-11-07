@@ -1,0 +1,29 @@
+name: Postman API contract
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/postman.collection.json'
+      - '.github/workflows/api-contract.yml'
+      - 'scripts/postman-summary.mjs'
+permissions:
+  contents: read
+jobs:
+  postman:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run Postman checks against the hosted Sandbox
+        run: npx --yes newman@6.2.1 run docs/postman.collection.json --reporters cli,json --reporter-json-export /tmp/newman-report.json --timeout-request 30000 --delay-request 150
+      - name: Create a report without headers or cookies
+        if: always()
+        run: node scripts/postman-summary.mjs /tmp/newman-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: postman-api-checks
+          path: artifacts/postman-summary.json
