@@ -8,7 +8,7 @@ import { runExpirationSweep } from './src/core/reservations/sweep.mjs';
 import { currentPolicy, createPolicy } from './src/core/policies/config.mjs';
 import { startPurchase, confirmPurchase } from './src/core/reservations/purchase.mjs';
 import { createAgentRun, processAgentRun, getAgentRun, resumeAgentAfterPayment, runFailureDrill } from './src/agents/shopper.mjs';
-import { merchantSession, createDemoSession } from './src/lib/session.mjs';
+import { merchantSession, createDemoSession, publicDemoSession, demoControlAllowed, demoResourceAllowed } from './src/lib/session.mjs';
 import { receiveWebhook } from './src/integrations/paypal/webhooks.mjs';
 import { legacyComparison, legacyEvidence } from './src/integrations/merchant/legacy-demo.mjs';
 import { buildReceipt } from './src/core/reservations/receipt.mjs';
@@ -23,7 +23,7 @@ const identities = [
 ].filter((entry) => entry.key && !entry.key.startsWith('replace-'));
 
 function identity(request) {
-  if (merchantSession(request)) {
+  if (merchantSession(request) || publicDemoSession(request)) {
     const persona = request.headers['x-demo-buyer'];
     return persona === 'a' ? identities.find(x => x.buyerId === 'buyer-a') : persona === 'b' ? identities.find(x => x.buyerId === 'buyer-b') : null;
   }
@@ -34,11 +34,15 @@ function identity(request) {
 }
 
 function merchantAuthorized(request) {
-  if (merchantSession(request)) return true;
+  if (merchantSession(request) || demoControlAllowed(request)) return true;
   const key = request.headers.authorization?.match(/^Bearer ([^\s]+)$/)?.[1];
   const expected = process.env.MERCHANT_API_KEY;
   return Boolean(key && expected && !expected.startsWith('replace-') && timingSafeEqual(
     createHash('sha256').update(key).digest(), createHash('sha256').update(expected).digest()));
+}
+
+function setSessionCookie(response, options){
+  response.setHeader('set-cookie', `resaf_session=${createDemoSession(options)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400${process.env.RENDER_EXTERNAL_URL ? '; Secure' : ''}`);
 }
 
 function send(response, status, body) {
@@ -86,10 +90,10 @@ const server = createServer(async (request, response) => {
     if (url.pathname === '/api/demo/session') {
       if (request.method === 'POST') {
         const body = await readBody(request);
-        if (typeof body.key !== 'string' || !merchantAuthorized({ headers: { authorization: `Bearer ${body.key}` } })) {
+        if (body.key !== undefined && (typeof body.key !== 'string' || !merchantAuthorized({ headers: { authorization: `Bearer ${body.key}` } }))) {
           return send(response, 401, { error: 'INVALID_MERCHANT_KEY' });
         }
-        response.setHeader('set-cookie', `resaf_session=${createDemoSession()}; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400${process.env.RENDER_EXTERNAL_URL ? '; Secure' : ''}`);
+        setSessionCookie(response, {role:body.key || merchantSession(request)?'merchant':'demo',resourceId:publicDemoSession(request)?.resourceId||null});
         return send(response, 200, { signed_in: true });
       }
       if (request.method === 'DELETE') {
@@ -204,7 +208,7 @@ const server = createServer(async (request, response) => {
       if (!merchantAuthorized(request)) return send(response,401,{error:'UNAUTHORIZED'});
       const key=request.headers['idempotency-key'];
       if(typeof key!=='string' || key.length<8 || key.length>128) return send(response,400,{error:'IDEMPOTENCY_KEY_REQUIRED'});
-      try {return send(response,201,await createDemoRound(merchantId,key));}
+      try {const round=await createDemoRound(merchantId,key);if(publicDemoSession(request))setSessionCookie(response,{role:'demo',resourceId:round.resource_id});return send(response,201,round);}
       catch(error){return send(response,409,{error:'ROUND_BLOCKED',message:error.message});}
     }
     if(request.method==='POST' && url.pathname==='/api/demo/failure-drill'){
@@ -213,18 +217,21 @@ const server = createServer(async (request, response) => {
       if(typeof key!=='string'||key.length<8||key.length>128)return send(response,400,{error:'IDEMPOTENCY_KEY_REQUIRED'});
       const body=await readBody(request);
       const actor=identities.find(x=>x.buyerId==='buyer-b');
+      if(!demoResourceAllowed(request,body.resource_id))return send(response,404,{error:'NOT_FOUND'});
       return send(response,200,await runFailureDrill(actor,body.resource_id,key));
     }
     if (request.method === 'POST' && url.pathname === '/api/demo/legacy-comparison') {
       if (!merchantAuthorized(request)) return send(response, 401, { error: 'UNAUTHORIZED' });
       const body = await readBody(request);
       if (typeof body.resource_id !== 'string' || !/^[a-zA-Z0-9-]{1,64}$/.test(body.resource_id)) return send(response,400,{error:'RESOURCE_ID_REQUIRED'});
+      if(body.resource_id!=='demo-resource-001'&&!demoResourceAllowed(request,body.resource_id))return send(response,404,{error:'NOT_FOUND'});
       return send(response, 200, await legacyComparison(body.resource_id));
     }
     const alertMatch=url.pathname.match(/^\/api\/v1\/merchant\/alerts\/([0-9a-f-]{36})\/acknowledge$/i);
     if(request.method==='POST'&&alertMatch){
-      if(!merchantAuthorized(request))return send(response,401,{error:'UNAUTHORIZED'});
-      const result=await pool.query(`UPDATE business_alerts SET status='REVIEWED' WHERE id=$1 AND merchant_id=$2 RETURNING id,status`,[alertMatch[1],merchantId]);
+      if(!merchantAuthorized(request)&&!publicDemoSession(request))return send(response,401,{error:'UNAUTHORIZED'});
+      const scope=publicDemoSession(request);
+      const result=await pool.query(`UPDATE business_alerts SET status='REVIEWED' WHERE id=$1 AND merchant_id=$2 AND ($3::text IS NULL OR resource_id=$3) RETURNING id,status`,[alertMatch[1],merchantId,scope?scope.resourceId||'no-demo-resource':null]);
       return send(response,result.rowCount?200:404,result.rows[0]||{error:'NOT_FOUND'});
     }
     if (request.method === 'GET' && url.pathname === '/api/v1/merchant/activity') {
@@ -258,7 +265,9 @@ const server = createServer(async (request, response) => {
         actor:'Business AI',category:'POLICY',action:'recommend_commitment',amount:d.decision?.amount,
         outcome:d.status === 'COMPLETED' ? `${d.decision.action}: ${d.decision.explanation}` : d.status,evidence:d});
       decisions.sort((a,b) => new Date(a.occurred_at) - new Date(b.occurred_at));
-      return send(response, 200, { decisions, runs: runs.rows, business_decisions:business.rows,alerts:alerts.rows });
+      const scope=publicDemoSession(request);
+      const visible=rows=>scope?(scope.resourceId?rows.filter(row=>row.resource_id===scope.resourceId):[]):rows;
+      return send(response, 200, { decisions:visible(decisions), runs:visible(runs.rows), business_decisions:visible(business.rows),alerts:visible(alerts.rows) });
     }
     const actor = identity(request);
     if (!actor) return send(response, 401, { error: 'UNAUTHORIZED' });
@@ -267,6 +276,7 @@ const server = createServer(async (request, response) => {
       const body = await readBody(request);
       const key = request.headers['idempotency-key'];
       if (typeof key !== 'string' || key.length < 8 || key.length > 128) return send(response, 400, { error: 'IDEMPOTENCY_KEY_REQUIRED' });
+      if(!demoResourceAllowed(request,body.resource_id))return send(response,404,{error:'NOT_FOUND'});
       const run = await createAgentRun(actor, body.objective, key,body.resource_id ?? null);
       void processAgentRun(run.id).catch(error => console.error('Agent processing failed:', error.message));
       return send(response, 202, run);
@@ -274,6 +284,7 @@ const server = createServer(async (request, response) => {
     const runMatch = url.pathname.match(/^\/api\/v1\/agents\/runs\/([0-9a-f-]{36})$/i);
     if (request.method === 'GET' && runMatch) {
       const run = await getAgentRun(runMatch[1], actor.buyerId);
+      if(run&&!demoResourceAllowed(request,run.resource_id))return send(response,404,{error:'NOT_FOUND'});
       return send(response, run ? 200 : 404, run ?? { error: 'NOT_FOUND' });
     }
 
@@ -284,6 +295,7 @@ const server = createServer(async (request, response) => {
         return send(response, 400, { error: 'IDEMPOTENCY_KEY_REQUIRED' });
       }
       if (typeof body.resource_id !== 'string') return send(response, 400, { error: 'RESOURCE_ID_REQUIRED' });
+      if(!demoResourceAllowed(request,body.resource_id))return send(response,404,{error:'NOT_FOUND'});
       const claim = await requestApprovalClaim({
         merchantId, resourceId: body.resource_id, buyerId: actor.buyerId,
         agentId: actor.agentId, idempotencyKey: key,
@@ -302,6 +314,10 @@ const server = createServer(async (request, response) => {
     if (reservationMatch) {
       const id = reservationMatch[1];
       const action = reservationMatch[2];
+      if(publicDemoSession(request)){
+        const scope=await pool.query('SELECT resource_id FROM reservations WHERE id=$1 AND buyer_id=$2',[id,actor.buyerId]);
+        if(!scope.rowCount||!demoResourceAllowed(request,scope.rows[0].resource_id))return send(response,404,{error:'NOT_FOUND'});
+      }
       if (request.method === 'POST' && action === 'purchase') {
         const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.APP_BASE_URL || 'http://localhost:3000';
         return send(response, 200, await startPurchase(id, actor.buyerId, baseUrl));

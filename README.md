@@ -57,7 +57,7 @@ After verified purchase, the UI displays a printable Sandbox confirmation with t
 
 ## Focused React demonstration
 
-The frontend uses React, source-owned shadcn-style components over Base UI primitives, and an esbuild production bundle. The main card shows one current outcome and next action. Competition, failure tests, receipts, and business controls are separate dialogs. AG Grid appears inside the competition dialog with actual claimant outcomes and expandable backend evidence.
+The frontend uses React, source-owned shadcn-style components over Base UI primitives, and an esbuild production bundle. The public Sandbox opens without a merchant key. Its signed demo session is restricted to its current demo resource; merchant API credentials remain separate. The main card shows one current outcome and next action. Competition, failure tests, receipts, and business controls are separate dialogs. AG Grid appears inside the competition dialog with actual claimant outcomes and expandable backend evidence.
 
 ?Start a fresh round? creates a new simulated merchant unit and policy, preserving previous paid sales and receipts. Two independent model runs then compete through the same reservation API. An unpaid provisional winner still needs PayPal approval before exclusive paid reservation. The losing agent waits or stops according to actual inventory and policy responses.
 
