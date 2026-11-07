@@ -1,8 +1,8 @@
 # Resaf
 
-[Live demo](https://resaf-api.onrender.com) ? [Try the API](https://resaf-api.onrender.com/developers) ? [OpenAPI](https://resaf-api.onrender.com/openapi.yaml) ? [Postman collection](https://resaf-api.onrender.com/postman.json)
+[Live demo](https://resaf-api.onrender.com) ? [Try the API](https://resaf-api.onrender.com/developers) ? [OpenAPI](https://resaf-api.onrender.com/openapi.yaml)
 
-Resaf is an AI reservation agent for businesses, backed by PayPal. It coordinates timed reservations, financial commitments, and policy-based refunds. Developers connect it to their inventory and checkout through its API. The demo uses two AI shoppers competing for one parking space; server-enforced business rules and verified PayPal results govern access and payments.
+Resaf is an AI reservation agent for businesses, backed by PayPal. It coordinates timed reservations, financial commitments, and policy-based refunds. Developers connect it to their inventory and checkout. The demo uses two AI shoppers competing for one parking space; server-enforced business rules and verified PayPal results govern access and payments.
 
 ## Current status
 
@@ -27,7 +27,7 @@ node --env-file=.env.local server.mjs
 
 After creating a claim, the same buyer calls `POST /api/v1/reservations/{id}/commitment`. The response contains PayPal's approval URL. The PayPal return URL verifies the authorization or completed capture required by the accepted policy before activating the reservation. The buyer can also call `POST /api/v1/reservations/{id}/confirm` if the return is interrupted; both paths require the provisional claim to remain valid. `POST /api/v1/reservations/{id}/release` ends the reservation and settles the commitment using that policy. Pending settlement is reported separately from the reservation state.
 
-The current API contract is [docs/openapi.yaml](docs/openapi.yaml), ready for Postman and APIMatic import. The [Postman collection](docs/postman.collection.json) runs 12 live HTTP requests and 20 assertions covering discovery, terms and access protection without financial operations. Its GitHub Actions Newman run passed with zero failures; see [test instructions and evidence](docs/postman.md). The focused sponsor integrations are Render hosting/PostgreSQL, AG Grid request contention, and Postman API checks. The sponsor decision is in [docs/sponsors.md](docs/sponsors.md).
+The integration contract is [docs/openapi.yaml](docs/openapi.yaml). Render hosts the application and PostgreSQL database; AG Grid presents competing requests and verified outcomes. See [the sponsor scope](docs/sponsors.md).
 
 ## Render
 

@@ -5,7 +5,7 @@ The required combination is PayPal Sandbox and meaningful AI. Sponsor tools are 
 | Sponsor | Resaf fit | Decision |
 |---|---|---|
 | Render | Host the app and PostgreSQL database in one platform. | Live app and database; independent expiration is triggered through Cloudflare. |
-| Postman | Publish and exercise the merchant-facing reservation API. | 12-request, 20-assertion collection runs through Newman in GitHub Actions. Run 42386090051 passed with zero failures; see postman.md. |
+| Postman | Optional API testing tool. | Excluded from the presented build and sponsor credits. |
 | APIMatic | Generate developer-facing SDK/docs from Resaf's OpenAPI contract and use its PayPal API context plugin. | Skip by product scope. No generated SDK or portal is claimed. |
 | Channel3 | External product discovery for shopping agents. | Skip by product scope. Resaf manages business reservations; it does not search for products to buy. |
 | AG Grid | Interactive ledger of competing reservation attempts, policy versions, PayPal verification, and inventory outcomes. | Live current-run competition view, with actual server outcomes and expandable evidence. |
@@ -21,4 +21,4 @@ Do not imply sponsor-prize eligibility from a logo or mention. A submission shou
 
 A merchant may add a new immutable policy version with a higher commitment and an `effective_at` time. New approval claims select the latest effective version and copy its amount and terms into the reservation. A pending or active claim keeps the amount shown to its buyer. The agent can explain the quote or decline it; it cannot set the amount. The business agent can recommend raise, lower or keep using observed demand within merchant-approved limits. Server code enforces the conditions; existing reservations keep their accepted quote and refund promises.
 
-Sources: [official hackathon rules](https://paypalaihackathon.devpost.com/rules), [Render sponsor page](https://paypalaihackathon.devpost.com/details/render), [Postman sponsor page](https://paypalaihackathon.devpost.com/details/postman), [APIMatic sponsor page](https://paypalaihackathon.devpost.com/details/apimatic), [Channel3 sponsor page](https://paypalaihackathon.devpost.com/details/channel3), and the other sponsor pages linked from the [hackathon overview](https://paypalaihackathon.devpost.com/).
+Sources: [official hackathon rules](https://paypalaihackathon.devpost.com/rules), [Render sponsor page](https://paypalaihackathon.devpost.com/details/render), [APIMatic sponsor page](https://paypalaihackathon.devpost.com/details/apimatic), [Channel3 sponsor page](https://paypalaihackathon.devpost.com/details/channel3), and the other sponsor pages linked from the [hackathon overview](https://paypalaihackathon.devpost.com/).
