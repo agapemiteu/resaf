@@ -12,7 +12,13 @@ test('fractional cents round down and never exceed the captured amount', () => {
   assert.equal(refundAmount('9999999999.99', 9999), '9998999999.99');
 });
 test('invalid money and refund percentages are rejected', () => {
-  for (const [amount, bps] of [['-2.00', 100], ['2.001', 100], ['2.00', 10001], ['2.00', -1], ['2.00', 0.5]]) {
+  for (const [amount, bps] of [
+    ['-2.00', 100],
+    ['2.001', 100],
+    ['2.00', 10001],
+    ['2.00', -1],
+    ['2.00', 0.5],
+  ]) {
     assert.throws(() => refundAmount(amount, bps));
   }
 });

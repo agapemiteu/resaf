@@ -8,7 +8,10 @@ const journalPath = join(process.cwd(), '.local', 'paypal-smoke.jsonl');
 
 function record(event, fields) {
   mkdirSync(dirname(journalPath), { recursive: true });
-  appendFileSync(journalPath, JSON.stringify({ at: new Date().toISOString(), event, ...fields }) + '\n');
+  appendFileSync(
+    journalPath,
+    JSON.stringify({ at: new Date().toISOString(), event, ...fields }) + '\n',
+  );
 }
 
 function usage() {
@@ -29,7 +32,9 @@ function requireCredentials() {
   const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    throw new Error('Set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET in .env.local.');
+    throw new Error(
+      'Set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET in .env.local.',
+    );
   }
 
   return { clientId, clientSecret };
@@ -42,13 +47,18 @@ async function readJson(response) {
   try {
     return JSON.parse(text);
   } catch {
-    throw new Error(`PayPal returned non-JSON content (HTTP ${response.status}).`);
+    throw new Error(
+      `PayPal returned non-JSON content (HTTP ${response.status}).`,
+    );
   }
 }
 
 function describeFailure(data) {
   const details = Array.isArray(data.details)
-    ? data.details.map((detail) => detail.description ?? detail.issue).filter(Boolean).join('; ')
+    ? data.details
+        .map((detail) => detail.description ?? detail.issue)
+        .filter(Boolean)
+        .join('; ')
     : '';
   return [data.name, data.message, details].filter(Boolean).join(': ');
 }
@@ -61,15 +71,17 @@ async function getAccessToken() {
     headers: {
       Authorization: `Basic ${basic}`,
       'Content-Type': 'application/x-www-form-urlencoded',
-      Accept: 'application/json'
+      Accept: 'application/json',
     },
     body: 'grant_type=client_credentials',
-    signal: AbortSignal.timeout(30000)
+    signal: AbortSignal.timeout(30000),
   });
   const data = await readJson(response);
 
   if (!response.ok) {
-    throw new Error(`PayPal OAuth failed (HTTP ${response.status}): ${describeFailure(data)}`);
+    throw new Error(
+      `PayPal OAuth failed (HTTP ${response.status}): ${describeFailure(data)}`,
+    );
   }
 
   if (!data.access_token) {
@@ -83,7 +95,7 @@ async function paypalRequest(path, { method = 'GET', body, requestId } = {}) {
   const accessToken = await getAccessToken();
   const headers = {
     Authorization: `Bearer ${accessToken}`,
-    Accept: 'application/json'
+    Accept: 'application/json',
   };
 
   if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -94,14 +106,14 @@ async function paypalRequest(path, { method = 'GET', body, requestId } = {}) {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(30000)
+    signal: AbortSignal.timeout(30000),
   });
   const data = await readJson(response);
 
   if (!response.ok) {
     const description = describeFailure(data);
     throw new Error(
-      `PayPal ${method} ${path} failed (HTTP ${response.status})${description ? `: ${description}` : ''}`
+      `PayPal ${method} ${path} failed (HTTP ${response.status})${description ? `: ${description}` : ''}`,
     );
   }
 
@@ -117,8 +129,10 @@ function stableReferenceId(requestId) {
 }
 
 async function createOrder(requestId) {
-  const returnUrl = process.env.PAYPAL_RETURN_URL || 'https://example.com/resaf/paypal-return';
-  const cancelUrl = process.env.PAYPAL_CANCEL_URL || 'https://example.com/resaf/paypal-cancel';
+  const returnUrl =
+    process.env.PAYPAL_RETURN_URL || 'https://example.com/resaf/paypal-return';
+  const cancelUrl =
+    process.env.PAYPAL_CANCEL_URL || 'https://example.com/resaf/paypal-cancel';
   record('CREATE_REQUESTED', { request_id: requestId });
   const order = await paypalRequest('/v2/checkout/orders', {
     method: 'POST',
@@ -129,68 +143,100 @@ async function createOrder(requestId) {
         {
           reference_id: stableReferenceId(requestId),
           description: 'Resaf sandbox reservation commitment',
-          amount: { currency_code: 'USD', value: '2.00' }
-        }
+          amount: { currency_code: 'USD', value: '2.00' },
+        },
       ],
       payment_source: {
         paypal: {
           experience_context: {
             return_url: returnUrl,
-            cancel_url: cancelUrl
-          }
-        }
-      }
-    }
+            cancel_url: cancelUrl,
+          },
+        },
+      },
+    },
   });
 
-  const approvalLink = order.links?.find((link) => ['payer-action', 'approve'].includes(link.rel))?.href;
+  const approvalLink = order.links?.find((link) =>
+    ['payer-action', 'approve'].includes(link.rel),
+  )?.href;
   if (!approvalLink) {
-    throw new Error(`PayPal created order ${order.id ?? '(unknown)'} without returning a buyer approval link.`);
+    throw new Error(
+      `PayPal created order ${order.id ?? '(unknown)'} without returning a buyer approval link.`,
+    );
   }
 
   const approvalUrl = new URL(approvalLink);
-  if (approvalUrl.protocol !== 'https:' || !/(^|\.)paypal\.com$/i.test(approvalUrl.hostname)) {
-    throw new Error('PayPal returned an approval link outside an HTTPS paypal.com domain.');
+  if (
+    approvalUrl.protocol !== 'https:' ||
+    !/(^|\.)paypal\.com$/i.test(approvalUrl.hostname)
+  ) {
+    throw new Error(
+      'PayPal returned an approval link outside an HTTPS paypal.com domain.',
+    );
   }
 
   console.log(`Order ID: ${order.id}`);
   console.log(`Order status: ${order.status}`);
   console.log(`PayPal-Request-Id: ${requestId}`);
   console.log(`Buyer approval URL: ${approvalUrl.href}`);
-  record('ORDER_CREATED', { order_id: order.id, status: order.status, request_id: requestId });
+  record('ORDER_CREATED', {
+    order_id: order.id,
+    status: order.status,
+    request_id: requestId,
+  });
 }
 
 async function authorizeOrder(orderId, requestId) {
   if (!orderId) throw new Error('Provide an order ID.');
 
-  const order = await paypalRequest(`/v2/checkout/orders/${encodeURIComponent(orderId)}`);
+  const order = await paypalRequest(
+    `/v2/checkout/orders/${encodeURIComponent(orderId)}`,
+  );
   if (order.status !== 'APPROVED') {
-    throw new Error(`Order ${orderId} is ${order.status ?? 'in an unknown state'}; buyer approval is required first.`);
+    throw new Error(
+      `Order ${orderId} is ${order.status ?? 'in an unknown state'}; buyer approval is required first.`,
+    );
   }
 
   record('AUTHORIZE_REQUESTED', { order_id: orderId, request_id: requestId });
 
-  const result = await paypalRequest(`/v2/checkout/orders/${encodeURIComponent(orderId)}/authorize`, {
-    method: 'POST',
-    requestId,
-    body: {}
-  });
-  const authorization = result.purchase_units?.flatMap((unit) => unit.payments?.authorizations ?? [])[0];
+  const result = await paypalRequest(
+    `/v2/checkout/orders/${encodeURIComponent(orderId)}/authorize`,
+    {
+      method: 'POST',
+      requestId,
+      body: {},
+    },
+  );
+  const authorization = result.purchase_units?.flatMap(
+    (unit) => unit.payments?.authorizations ?? [],
+  )[0];
 
   if (!authorization?.id) {
-    throw new Error(`PayPal authorization response for order ${orderId} did not include an authorization ID.`);
+    throw new Error(
+      `PayPal authorization response for order ${orderId} did not include an authorization ID.`,
+    );
   }
 
-  const verified = await paypalRequest(`/v2/payments/authorizations/${encodeURIComponent(authorization.id)}`);
+  const verified = await paypalRequest(
+    `/v2/payments/authorizations/${encodeURIComponent(authorization.id)}`,
+  );
   record('AUTHORIZATION_VERIFIED', {
-    order_id: orderId, authorization_id: verified.id, status: verified.status,
-    amount: verified.amount?.value, currency: verified.amount?.currency_code, request_id: requestId
+    order_id: orderId,
+    authorization_id: verified.id,
+    status: verified.status,
+    amount: verified.amount?.value,
+    currency: verified.amount?.currency_code,
+    request_id: requestId,
   });
   console.log(`Order ID: ${orderId}`);
   console.log(`Order status: ${result.status}`);
   console.log(`Authorization ID: ${verified.id}`);
   console.log(`Authorization status: ${verified.status}`);
-  console.log(`Amount: ${verified.amount?.currency_code ?? 'unknown'} ${verified.amount?.value ?? 'unknown'}`);
+  console.log(
+    `Amount: ${verified.amount?.currency_code ?? 'unknown'} ${verified.amount?.value ?? 'unknown'}`,
+  );
   console.log(`PayPal-Request-Id: ${requestId}`);
 }
 
@@ -198,28 +244,44 @@ async function inspectAuthorization(authorizationId) {
   if (!authorizationId) throw new Error('Provide an authorization ID.');
 
   const authorization = await paypalRequest(
-    `/v2/payments/authorizations/${encodeURIComponent(authorizationId)}`
+    `/v2/payments/authorizations/${encodeURIComponent(authorizationId)}`,
   );
-  record('AUTHORIZATION_INSPECTED', { authorization_id: authorization.id, status: authorization.status });
+  record('AUTHORIZATION_INSPECTED', {
+    authorization_id: authorization.id,
+    status: authorization.status,
+  });
   console.log(`Authorization ID: ${authorization.id}`);
   console.log(`Authorization status: ${authorization.status}`);
-  console.log(`Amount: ${authorization.amount?.currency_code ?? 'unknown'} ${authorization.amount?.value ?? 'unknown'}`);
+  console.log(
+    `Amount: ${authorization.amount?.currency_code ?? 'unknown'} ${authorization.amount?.value ?? 'unknown'}`,
+  );
 }
 
 async function voidAuthorization(authorizationId, requestId) {
   if (!authorizationId) throw new Error('Provide an authorization ID.');
 
-  record('VOID_REQUESTED', { authorization_id: authorizationId, request_id: requestId });
+  record('VOID_REQUESTED', {
+    authorization_id: authorizationId,
+    request_id: requestId,
+  });
 
   await paypalRequest(
     `/v2/payments/authorizations/${encodeURIComponent(authorizationId)}/void`,
-    { method: 'POST', requestId, body: {} }
+    { method: 'POST', requestId, body: {} },
   );
-  const verified = await paypalRequest(`/v2/payments/authorizations/${encodeURIComponent(authorizationId)}`);
-  record('VOID_VERIFIED', { authorization_id: verified.id ?? authorizationId, status: verified.status, request_id: requestId });
+  const verified = await paypalRequest(
+    `/v2/payments/authorizations/${encodeURIComponent(authorizationId)}`,
+  );
+  record('VOID_VERIFIED', {
+    authorization_id: verified.id ?? authorizationId,
+    status: verified.status,
+    request_id: requestId,
+  });
 
   if (verified.status !== 'VOIDED') {
-    throw new Error(`Authorization ${authorizationId} is ${verified.status ?? 'in an unknown state'} after void request; inspect it before retrying.`);
+    throw new Error(
+      `Authorization ${authorizationId} is ${verified.status ?? 'in an unknown state'} after void request; inspect it before retrying.`,
+    );
   }
 
   console.log(`Authorization ID: ${verified.id ?? authorizationId}`);

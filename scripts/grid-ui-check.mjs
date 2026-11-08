@@ -1,16 +1,169 @@
-import {chromium} from 'playwright';
+import { chromium } from 'playwright';
 import fs from 'node:fs/promises';
 import assert from 'node:assert/strict';
 // UI fixtures only: all Resaf requests are intercepted. No real payments or model calls.
-await fs.mkdir('artifacts',{recursive:true});
-const browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
-const rid='demo-layout-fixture';const claim={id:'layout-claim',resource_id:rid,status:'PENDING_COMMITMENT',commitment_amount:'2.00',currency:'USD',payments:[]};
-const runs={a:{id:'layout-a',buyer_id:'buyer-a',resource_id:rid,objective:'Layout fixture',status:'AWAITING_APPROVAL',steps:[{tool:'request_reservation',result:{reservation_id:claim.id,status:claim.status}}],result:{reservation_id:claim.id}},b:{id:'layout-b',buyer_id:'buyer-b',resource_id:rid,objective:'Layout fixture',status:'WAITING_FOR_AVAILABILITY',steps:[],result:{error:'UNAVAILABLE'}}};
-await page.route('https://resaf-api.onrender.com/**',async route=>{const u=new URL(route.request().url()),path=u.pathname;const files={'/':'public/index.html','/styles.css':'public/styles.css','/assets/app.js':'public/assets/app.js','/parking-thumbnail.png':'public/parking-thumbnail.png'};if(files[path])return route.fulfill({body:await fs.readFile(files[path]),contentType:path.endsWith('.js')?'text/javascript':path.endsWith('.css')?'text/css':path.endsWith('.png')?'image/png':'text/html'});
-let body={};if(path==='/api/demo/session')body={signed_in:true};else if(path==='/api/demo/rounds')body={resource_id:rid};else if(path==='/api/v1/agents/runs')body=runs[route.request().headers()['x-demo-buyer']];else if(path==='/api/v1/merchant/activity')body={runs:Object.values(runs),decisions:[],alerts:[]};else if(path.includes('/agents/runs/'))body=path.endsWith('layout-a')?runs.a:runs.b;else if(path.includes('/reservations/'))body=claim;else if(path.endsWith('/policy'))body={id:'fixture-policy',commitment_amount:'2.00',hold_duration_seconds:600,purchase_refund_bps:10000};else if(path.includes('/resources/'))body={resource_id:rid,title:'Parking space P-01',price:'25.00',status:'AVAILABLE'};return route.fulfill({json:body});});
-await page.goto('https://resaf-api.onrender.com');await page.getByRole('button',{name:'Run',exact:true}).click();await page.getByRole('button',{name:'Race',exact:true}).click();await page.locator('.race-grid .ag-row').first().waitFor({timeout:20000});
-assert.match(await page.locator('.grid-overview strong').textContent(),/Agent A/);
-assert.ok(await page.locator('.race-grid .ag-row').count()>=2);
-const view=page.getByRole('button',{name:'View Agent A request details',exact:true});await view.focus();await page.keyboard.press('Enter');await page.getByText('Request details',{exact:true}).waitFor({timeout:5000}).catch(async error=>{await page.screenshot({path:'artifacts/grid-keyboard-failure.png'});console.log(JSON.stringify({errors,active:await page.evaluate(()=>document.activeElement?.outerHTML)}));throw error;});await page.getByText('Request details',{exact:true}).click();
-console.log(JSON.stringify({gridRows:await page.locator('.ag-row').count(),fallback:await page.locator('.grid-fallback').count(),summary:await page.locator('.grid-overview strong').textContent(),errors}));await page.screenshot({path:'artifacts/grid-desktop.png'});await page.setViewportSize({width:390,height:844});await page.waitForTimeout(350);assert.equal(await page.locator('.race-grid .ag-header-cell[col-id="statusLabel"]').isVisible(),true);assert.equal(await page.locator('.race-grid .ag-header-cell[col-id="timeline"]').count(),0);await page.screenshot({path:'artifacts/grid-mobile.png'});console.log(JSON.stringify({mobileOverflow:await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)}));assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-await page.route('https://cdn.jsdelivr.net/**',route=>route.abort());await page.reload();await page.getByRole('button',{name:'Run',exact:true}).click();await page.getByRole('button',{name:'Race',exact:true}).click();await page.waitForTimeout(5500);assert.equal(await page.locator('.grid-fallback').first().isVisible(),true);assert.equal(await page.getByRole('button',{name:'View Agent A request details',exact:true}).isVisible(),true);await page.screenshot({path:'artifacts/grid-fallback.png'});assert.deepEqual(errors,[]);console.log('Desktop, mobile, keyboard evidence, and CDN-failure fallback passed. UI fixtures only.');await browser.close();
+await fs.mkdir('artifacts', { recursive: true });
+const browser = await chromium.launch({ headless: true });
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+const errors = [];
+page.on('pageerror', (e) => errors.push(e.message));
+const rid = 'demo-layout-fixture';
+const claim = {
+  id: 'layout-claim',
+  resource_id: rid,
+  status: 'PENDING_COMMITMENT',
+  commitment_amount: '2.00',
+  currency: 'USD',
+  payments: [],
+};
+const runs = {
+  a: {
+    id: 'layout-a',
+    buyer_id: 'buyer-a',
+    resource_id: rid,
+    objective: 'Layout fixture',
+    status: 'AWAITING_APPROVAL',
+    steps: [
+      {
+        tool: 'request_reservation',
+        result: { reservation_id: claim.id, status: claim.status },
+      },
+    ],
+    result: { reservation_id: claim.id },
+  },
+  b: {
+    id: 'layout-b',
+    buyer_id: 'buyer-b',
+    resource_id: rid,
+    objective: 'Layout fixture',
+    status: 'WAITING_FOR_AVAILABILITY',
+    steps: [],
+    result: { error: 'UNAVAILABLE' },
+  },
+};
+await page.route('https://resaf-api.onrender.com/**', async (route) => {
+  const u = new URL(route.request().url()),
+    path = u.pathname;
+  const files = {
+    '/': 'public/index.html',
+    '/styles.css': 'public/styles.css',
+    '/assets/app.js': 'public/assets/app.js',
+    '/parking-thumbnail.png': 'public/parking-thumbnail.png',
+  };
+  if (files[path])
+    return route.fulfill({
+      body: await fs.readFile(files[path]),
+      contentType: path.endsWith('.js')
+        ? 'text/javascript'
+        : path.endsWith('.css')
+          ? 'text/css'
+          : path.endsWith('.png')
+            ? 'image/png'
+            : 'text/html',
+    });
+  let body = {};
+  if (path === '/api/demo/session') body = { signed_in: true };
+  else if (path === '/api/demo/rounds') body = { resource_id: rid };
+  else if (path === '/api/v1/agents/runs')
+    body = runs[route.request().headers()['x-demo-buyer']];
+  else if (path === '/api/v1/merchant/activity')
+    body = { runs: Object.values(runs), decisions: [], alerts: [] };
+  else if (path.includes('/agents/runs/'))
+    body = path.endsWith('layout-a') ? runs.a : runs.b;
+  else if (path.includes('/reservations/')) body = claim;
+  else if (path.endsWith('/policy'))
+    body = {
+      id: 'fixture-policy',
+      commitment_amount: '2.00',
+      hold_duration_seconds: 600,
+      purchase_refund_bps: 10000,
+    };
+  else if (path.includes('/resources/'))
+    body = {
+      resource_id: rid,
+      title: 'Parking space P-01',
+      price: '25.00',
+      status: 'AVAILABLE',
+    };
+  return route.fulfill({ json: body });
+});
+await page.goto('https://resaf-api.onrender.com');
+await page.getByRole('button', { name: 'Run', exact: true }).click();
+await page.getByRole('button', { name: 'Race', exact: true }).click();
+await page.locator('.race-grid .ag-row').first().waitFor({ timeout: 20000 });
+assert.match(
+  await page.locator('.grid-overview strong').textContent(),
+  /Agent A/,
+);
+assert.ok((await page.locator('.race-grid .ag-row').count()) >= 2);
+const view = page.getByRole('button', {
+  name: 'View Agent A request details',
+  exact: true,
+});
+await view.focus();
+await page.keyboard.press('Enter');
+await page
+  .getByText('Request details', { exact: true })
+  .waitFor({ timeout: 5000 })
+  .catch(async (error) => {
+    await page.screenshot({ path: 'artifacts/grid-keyboard-failure.png' });
+    console.log(
+      JSON.stringify({
+        errors,
+        active: await page.evaluate(() => document.activeElement?.outerHTML),
+      }),
+    );
+    throw error;
+  });
+await page.getByText('Request details', { exact: true }).click();
+console.log(
+  JSON.stringify({
+    gridRows: await page.locator('.ag-row').count(),
+    fallback: await page.locator('.grid-fallback').count(),
+    summary: await page.locator('.grid-overview strong').textContent(),
+    errors,
+  }),
+);
+await page.screenshot({ path: 'artifacts/grid-desktop.png' });
+await page.setViewportSize({ width: 390, height: 844 });
+await page.waitForTimeout(350);
+assert.equal(
+  await page
+    .locator('.race-grid .ag-header-cell[col-id="statusLabel"]')
+    .isVisible(),
+  true,
+);
+assert.equal(
+  await page.locator('.race-grid .ag-header-cell[col-id="timeline"]').count(),
+  0,
+);
+await page.screenshot({ path: 'artifacts/grid-mobile.png' });
+console.log(
+  JSON.stringify({
+    mobileOverflow: await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  }),
+);
+assert.equal(
+  await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
+  false,
+);
+await page.route('https://cdn.jsdelivr.net/**', (route) => route.abort());
+await page.reload();
+await page.getByRole('button', { name: 'Run', exact: true }).click();
+await page.getByRole('button', { name: 'Race', exact: true }).click();
+await page.waitForTimeout(5500);
+assert.equal(await page.locator('.grid-fallback').first().isVisible(), true);
+assert.equal(
+  await page
+    .getByRole('button', { name: 'View Agent A request details', exact: true })
+    .isVisible(),
+  true,
+);
+await page.screenshot({ path: 'artifacts/grid-fallback.png' });
+assert.deepEqual(errors, []);
+console.log(
+  'Desktop, mobile, keyboard evidence, and CDN-failure fallback passed. UI fixtures only.',
+);
+await browser.close();

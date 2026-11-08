@@ -7,7 +7,10 @@ import { reconcilePurchases } from './purchase.mjs';
 import { processWaitingAgents } from '../../agents/shopper.mjs';
 import { processWebhookEvents } from '../../integrations/paypal/webhooks.mjs';
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 2,
+});
 
 export async function runExpirationSweep() {
   await processWebhookEvents();
@@ -42,5 +45,11 @@ export async function runExpirationSweep() {
   }
   const policiesChanged = await evaluatePolicies();
   await processWaitingAgents();
-  return { expired, voided, settled, failed, policies_changed: policiesChanged };
+  return {
+    expired,
+    voided,
+    settled,
+    failed,
+    policies_changed: policiesChanged,
+  };
 }

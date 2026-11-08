@@ -2,5 +2,8 @@ name = "resaf-expiration"
 main = "worker/cron.mjs"
 compatibility_date = "2026-11-05"
 
+[vars]
+RESAF_BASE_URL = "https://resaf-api.onrender.com"
+
 [triggers]
 crons = ["* * * * *"]

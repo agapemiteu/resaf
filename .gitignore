@@ -1,5 +1,4 @@
 node_modules/
-.next/
 .env
 .env.*
 !.env.example
@@ -9,6 +8,9 @@ coverage/
 session.log
 MEMORY.md
 .gstack/
+.wrangler/
 
 public/assets/
 artifacts/
+docs/*.mp4
+docs/video-output/

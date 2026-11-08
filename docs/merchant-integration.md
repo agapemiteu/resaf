@@ -1,17 +1,39 @@
-# Merchant policy integration
+# Merchant integration
 
-The demo merchant publishes policies with its server-side `MERCHANT_API_KEY`. Agents use separate buyer credentials. Never put the merchant key in browser code or an agent prompt.
+Keep the product catalog and checkout in your application. Use Resaf for claims, commitments, reservation deadlines and settlement. The current Sandbox implementation has one merchant, USD payments and quantity-one resources.
 
-1. Discover terms with `GET /api/v1/resources/bag-001/policy`.
-2. Publish changes with `POST /api/v1/resources/bag-001/policy`, a merchant bearer key, and a fresh `Idempotency-Key`.
-3. Agents request reservations and receive the commitment amount and accepted policy terms.
-4. Resaf verifies the PayPal commitment before activating the reservation, then settles against that reservation's original policy.
+The [OpenAPI contract](openapi.yaml) lists request bodies and responses. The hosted [developer playground](https://resaf-api.onrender.com/developers) runs public discovery requests.
 
-Example policy request:
+## Credentials
+
+Use `MERCHANT_API_KEY` for policy changes and the server-issued buyer key for reservation actions. Send credentials as `Authorization: Bearer <key>`. Buyer identity comes from that credential. Keep these keys on the server.
+
+Send a fresh `Idempotency-Key` with each logical write. Retry the same operation with the same key; reusing a key for different input is rejected.
+
+## Reservation sequence
+
+| Request                                           | Result                                                          |
+| ------------------------------------------------- | --------------------------------------------------------------- |
+| `GET /api/v1/resources/{id}`                      | Inspect availability.                                           |
+| `GET /api/v1/resources/{id}/policy`               | Read the current terms.                                         |
+| `POST /api/v1/reservations`                       | Obtain an approval claim and accepted terms.                    |
+| `POST /api/v1/reservations/{id}/commitment`       | Create the PayPal commitment order and return its approval URL. |
+| `POST /api/v1/reservations/{id}/confirm`          | Verify the approved payment and activate the reservation.       |
+| `GET /api/v1/reservations/{id}`                   | Read reservation and payment state.                             |
+| `POST /api/v1/reservations/{id}/purchase`         | Start the separate booking checkout.                            |
+| `POST /api/v1/reservations/{id}/confirm-purchase` | Verify purchase and settle the commitment.                      |
+| `POST /api/v1/reservations/{id}/release`          | Release the reservation and settle under its terms.             |
+| `GET /api/v1/reservations/{id}/receipt`           | Retrieve the verified purchase confirmation.                    |
+
+The signed PayPal return route also confirms payments. Discovery is public; reservation actions require ownership.
+
+## Publish a policy
+
+Send `POST /api/v1/resources/{id}/policy` with a merchant bearer key and an idempotency key. For the seeded example, use `demo-resource-001`.
 
 ```json
 {
-  "commitment_amount": "3.00",
+  "commitment_amount": "2.00",
   "currency": "USD",
   "payment_mode": "CAPTURE",
   "hold_duration_seconds": 600,
@@ -24,8 +46,6 @@ Example policy request:
 }
 ```
 
-Refunds use basis points: `10000` means 100%, `5000` means 50%, and `0` means retain the fee. Omit `effective_at` to apply immediately, or supply a timestamp with a timezone to schedule a change. The newest effective timestamp wins; version breaks ties. Policies are never edited or deleted by this API. Replaying the same key and terms returns the same policy; changing terms under that key is rejected.
+Omit `effective_at` to apply immediately, or supply a timestamp with a timezone to schedule a change. A policy update creates an immutable version. Accepted reservations retain their original amounts and refund conditions.
 
-The current Sandbox integration supports USD and one merchant with one-unit inventory. The resource ID is generic; the API does not require a product-specific resource shape. Final purchase verification remains to be implemented.
-
-The [OpenAPI contract](openapi.yaml) is the shared source for Postman and APIMatic imports. Generated SDKs and hosted API documentation have not yet been published through APIMatic.
+Optional automatic pricing uses demand thresholds, minimum and maximum amounts, a step size and a cooldown. The business agent recommends a permitted change; server code checks those limits before publishing the next version.

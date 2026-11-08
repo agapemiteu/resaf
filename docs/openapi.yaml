@@ -21,9 +21,22 @@ components:
     PolicyInput:
       type: object
       additionalProperties: false
-      required: [commitment_amount, currency, payment_mode, hold_duration_seconds, approval_claim_seconds, max_active_holds_per_buyer, repeat_cooldown_seconds, purchase_refund_bps, release_refund_bps, expiry_refund_bps]
+      required:
+        [
+          commitment_amount,
+          currency,
+          payment_mode,
+          hold_duration_seconds,
+          approval_claim_seconds,
+          max_active_holds_per_buyer,
+          repeat_cooldown_seconds,
+          purchase_refund_bps,
+          release_refund_bps,
+          expiry_refund_bps,
+        ]
       properties:
-        commitment_amount: { type: string, pattern: '^\d{1,8}\.\d{2}$', example: '2.00' }
+        commitment_amount:
+          { type: string, pattern: '^\d{1,8}\.\d{2}$', example: '2.00' }
         currency: { type: string, enum: [USD] }
         payment_mode: { type: string, enum: [AUTHORIZE, CAPTURE] }
         hold_duration_seconds: { type: integer, minimum: 1, maximum: 86400 }
@@ -33,7 +46,12 @@ components:
         purchase_refund_bps: { type: integer, minimum: 0, maximum: 10000 }
         release_refund_bps: { type: integer, minimum: 0, maximum: 10000 }
         expiry_refund_bps: { type: integer, minimum: 0, maximum: 10000 }
-        effective_at: { type: string, format: date-time, description: Omit to apply immediately. Future dates schedule a policy change. }
+        effective_at:
+          {
+            type: string,
+            format: date-time,
+            description: Omit to apply immediately. Future dates schedule a policy change.,
+          }
     Error:
       type: object
       properties:
@@ -62,7 +80,11 @@ paths:
       security: []
       description: Discover the currently effective merchant policy without payment.
       responses:
-        '200': { description: Current policy including its ID, version and settlement terms }
+        '200':
+          {
+            description: Current policy including its ID,
+            version and settlement terms,
+          }
         '404': { description: Resource has no effective policy }
     post:
       security:
@@ -79,7 +101,10 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/PolicyInput' }
       responses:
-        '201': { description: Created policy or replay of the same idempotent request }
+        '201':
+          {
+            description: Created policy or replay of the same idempotent request,
+          }
         '400': { description: Invalid policy terms }
         '401': { description: Merchant credentials required }
         '404': { description: Resource does not belong to merchant }
@@ -152,7 +177,8 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         '200': { description: Claim released }
-        '202': { description: Reservation ended; PayPal settlement still pending }
+        '202':
+          { description: Reservation ended; PayPal settlement still pending }
   /api/v1/reservations/{id}/commitment:
     post:
       description: Create a PayPal commitment order using the reservation's accepted AUTHORIZE or CAPTURE policy.
@@ -173,7 +199,8 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
-        '200': { description: PayPal commitment verified and reservation activated }
+        '200':
+          { description: PayPal commitment verified and reservation activated }
         '409': { description: Approval missing or claim ended }
 
   /api/v1/reservations/{id}/receipt:
@@ -185,7 +212,10 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
-        '200': { description: Verified payment receipt with separate commitment and confirmed refund totals }
+        '200':
+          {
+            description: Verified payment receipt with separate commitment and confirmed refund totals,
+          }
         '404': { description: Reservation does not belong to this buyer }
         '409': { description: Purchase or payment is not verified }
 
@@ -194,7 +224,8 @@ paths:
       security: [{ merchantAuth: [] }]
       description: Create a fresh simulated merchant resource and policy without resetting any previous financial records. Requires Idempotency-Key; blocked while a live claim exists.
       responses:
-        '201': { description: New or idempotently replayed round and resource ID }
+        '201':
+          { description: New or idempotently replayed round and resource ID }
         '401': { description: Merchant authorization required }
         '409': { description: Current claim must finish first }
   /api/demo/failure-drill:
@@ -211,5 +242,6 @@ paths:
               properties:
                 resource_id: { type: string }
       responses:
-        '200': { description: Recorded simulated failure with payment NOT_ATTEMPTED }
+        '200':
+          { description: Recorded simulated failure with payment NOT_ATTEMPTED }
         '401': { description: Merchant authorization required }
