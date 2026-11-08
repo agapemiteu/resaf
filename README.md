@@ -6,6 +6,8 @@ Resaf is an AI reservation agent for businesses, backed by PayPal. It coordinate
 
 A verified PayPal commitment is required before a paid reservation activates. Purchase and refund results are also checked against PayPal; the agent cannot invent a successful payment. See [how PayPal-backed enforcement works](docs/paypal-central.md).
 
+Presentation: [video script, timing and 2026 evidence](docs/video-script.md).
+
 ## Current status
 
 - A real PayPal Sandbox $2 authorization and void lifecycle has been verified with the CLI harness.

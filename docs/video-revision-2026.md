@@ -21,3 +21,15 @@ The user requests removing Postman from the presentation and site credits. Do no
    - https://www.hotel-online.com/news/are-hotels-closing-their-doors-to-ai-agents
 
 Remove the 2024 loss and no-show figures from the revised video. Do not claim The RealReal could certainly stop blocking agents if it used Resaf. Present Resaf as an alternative approach businesses can evaluate: accountable reservations alongside existing controls.
+
+## November 8 economic evidence and story cut
+
+Use the suspenseful “The last item is available, but you can't buy it” opening, then distinguish the reported problem, economic stakes, live demonstration and closing business applications. No old scarcity tagline. Name Gemini and AG Grid during the actual demo, with compact contextual labels. Keep the full original laptop geometry and use localized privacy blur only.
+
+Adobe's September 28, 2026 forecast projects **$275.1 billion** in U.S. online retail sales for November–December 2026, up 6.7% year over year. This is a forecast and broad commerce context. It is not Resaf's addressable market or lost revenue. [Official Adobe release](https://news.adobe.com/news/2026/09/adobe-us-holiday-shopping-season-to-hit-record).
+
+The economic illustration is **10 otherwise-filled $25 bookings/day × 30 days = $7,500 in monthly gross booking value**. The card and narration identify it as illustrative. It assumes those bookings would have completed without the blockage. Do not claim measured losses, profit or a guaranteed recovery percentage. Businesses and developers serving clients can evaluate this opportunity through actual completed bookings, refunds and released capacity.
+
+AHLA also projects nearly $805 billion in 2026 hotel guest spending. This includes broad guest expenditure and is not room-booking revenue, so it is omitted from the short film to avoid inflating the reservation opportunity. [AHLA January 2026 release](https://www.ahla.com/news/ahla-releases-2026-state-industry).
+
+The original RealReal report provides no audited dollar loss or affected-customer total. The Quantum Metric benchmark measures abandonment and mixes US/UK survey context with aggregated platform data; it is not a national US loss estimate. Keep those distinctions explicit.
