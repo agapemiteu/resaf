@@ -37,7 +37,7 @@ Source code: https://github.com/agapemiteu/resaf
 02:15 Render and scheduled cleanup
 02:21 Businesses and developers
 
-Build: PayPal Orders and Payments; Gemini with Groq fallback; AG Grid; React and Node.js; PostgreSQL and Drizzle; Render; Cloudflare scheduled cleanup. Postman is not claimed as a build integration.
+Build: PayPal Orders and Payments; Gemini with Groq fallback; AG Grid; React and Node.js; PostgreSQL and Drizzle; Render; Cloudflare scheduled cleanup.
 
 ## Research
 
