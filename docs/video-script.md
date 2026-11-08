@@ -1,10 +1,10 @@
 # Resaf submission video
 
-Current cut: **Resaf-PayPal-Story.mp4**, **2:31**, **22.81 MB**, full original 1920×1080 screen. Prepared November 8, 2026.
+Current cut: **Resaf-PayPal-Pitch.mp4**, **2:42**, **24.38 MB**, full original 1920×1080 laptop screen. Prepared November 8, 2026.
 
-The story moves from the pain to the business stakes, then into a clearly marked live Sandbox demonstration. Gemini and AG Grid are explained while their actual work is visible. Render and Cloudflare are explained before the closing applications. PayPal remains the financial gate: Resaf verifies payment before granting the paid reservation and confirms the policy-based refund before showing settlement.
+The pitch moves from repeated holds to the revenue opportunity, then shows a live Sandbox demonstration. Gemini and AG Grid are named during their actual work. PayPal confirmation gates the paid reservation and completes the refund trail. Render and scheduled cleanup appear before the closing applications.
 
-The merchant sets fees, deadlines and refund terms. Resaf enforces inventory and timing. PayPal executes and confirms financial operations. This recording uses a captured commitment and refund; it is not an uncaptured authorization hold.
+The business sets fees, deadlines and refund conditions. Resaf enforces inventory and timing. PayPal executes and confirms financial operations. The recorded round collects a commitment and returns it after purchase.
 
 ## 0:00–0:15 · The last item
 
@@ -14,63 +14,63 @@ The last item is available, but you can't buy it. An AI got there first, and kee
 
 In October 2026, The Verge kept ten RealReal listings on repeating twenty minute holds throughout the day using Meta's Muse. The retailer tightened transaction defenses, while discovery stayed open.
 
-## 0:28–0:39 · Agent abandonment
+## 0:28–0:42 · Turn traffic into commitment
 
-Quantum Metric's 2026 benchmark found forty eight abandoned retail agent carts per purchase, versus about three overall. That's abandonment, not a measured loss of sales.
+Quantum Metric's 2026 benchmark found forty eight abandoned retail agent carts per purchase, versus about three overall. Businesses need a way to turn agent traffic into genuine commitment.
 
-## 0:39–0:54 · U.S. stakes and illustrative booking value
+## 0:42–1:01 · Revenue opportunity
 
-Adobe forecasts two hundred seventy five billion dollars in U.S. online holiday sales this year. For a small operator, ten missed twenty five dollar bookings daily would mean seventy five hundred dollars in monthly booking value. That's illustrative, not measured losses.
+Adobe forecasts two hundred seventy five billion dollars in U.S. online holiday sales this year. For a parking operator, completing ten additional twenty five dollar bookings a day could generate seventy five hundred dollars in monthly booking revenue. That's the opportunity: turn blocked availability into completed bookings.
 
-## 0:54–1:07 · PayPal-backed reservations
+## 1:01–1:14 · PayPal-backed reservations
 
 Businesses plug in Resaf, an AI reservation agent backed by PayPal. Verified commitment unlocks a timed reservation. No commitment? The claim expires, giving someone else a chance. Businesses set the terms; Resaf enforces them.
 
-## 1:07–1:10 · Live Sandbox demo
+## 1:14–1:17 · Live Sandbox demo
 
 Now, let's put that to the test.
 
-## 1:10–1:24 · Gemini tools and AG Grid
+## 1:17–1:31 · Gemini tools and AG Grid
 
 Two AI shoppers want one parking space. Gemini reads the rules and chooses real tools; Groq provides fallback. Watch their calls on the right. One gets an approval claim; the other waits. AG Grid shows who can proceed, and what happens next.
 
-## 1:24–1:37 · Business terms
+## 1:31–1:44 · Business terms
 
 Two dollars buys ten minutes after verified payment. Future fees can change under business rules; accepted terms stay fixed. Early release refunds half. Expiry returns nothing, and opens the space to someone else.
 
-## 1:37–1:52 · Verify the PayPal commitment
+## 1:44–1:59 · Verify the PayPal commitment
 
 Here comes PayPal. I approve two dollars. Resaf checks the capture, amount, currency and payment ID before activating the paid hold. A model's promise isn't payment. Uncertain results stay unresolved for reconciliation; the agent cannot invent success.
 
-## 1:52–2:02 · Complete the booking
+## 1:59–2:09 · Complete the booking
 
 Next, I book. PayPal captures twenty five dollars. Resaf verifies the purchase before marking the space sold. The accepted rule then requests the two dollar commitment back through PayPal.
 
-## 2:02–2:15 · Receipt and confirmed refund
+## 2:09–2:22 · Receipt and confirmed refund
 
 Here's the proof: two dollars collected, twenty five paid, two returned. Stored IDs link the captures and refund. Resaf marks settlement complete only after PayPal confirms the return. These are real Sandbox records and test money.
 
-## 2:15–2:21 · Render and scheduled cleanup
+## 2:22–2:28 · Render and scheduled cleanup
 
 Render hosts the React and Node app with PostgreSQL. Cloudflare triggers expiration cleanup, even when the browser is closed.
 
-## 2:21–2:31 · Businesses and developers
+## 2:28–2:41 · A fair chance for everyone
 
-Businesses and developers plug Resaf into parking, hotel rooms, services and their clients' reservations. Backed by PayPal. Agents can be faster. They shouldn't keep everyone else waiting.
+Businesses and developers plug Resaf into parking, hotel rooms, services and their clients' reservations. Backed by PayPal. Agents move faster. They shouldn't shut everyone else out.
 
-## Evidence and limits
+## Figures and sources
 
-The $275.1 billion figure is Adobe's forecast for November–December 2026 U.S. online retail sales. The narration rounds it to $275 billion. This is market context, not Resaf revenue, a serviceable-market estimate or money lost to agents.
+- **48 versus about 3:** Quantum Metric's 2026 benchmark compares abandoned retail-agent carts per completed purchase with retail traffic overall.
+- **$275.1 billion:** Adobe's forecast for U.S. online retail sales during November–December 2026. The narration rounds it to $275 billion.
+- **$7,500 in potential monthly booking revenue:** projected scenario of ten additional completed $25 bookings per day over 30 days. Formula: 10 × $25 × 30.
 
-The $7,500 example is arithmetic: 10 otherwise-filled bookings per day × $25 × 30 days. It illustrates gross booking value at risk if those bookings are lost. It is not measured loss, profit, guaranteed recovery or an estimate for The RealReal. Incremental revenue depends on actual completed bookings and must be measured with merchants.
+The opportunity is converting available capacity into completed bookings. Businesses and the developers serving them can connect Resaf to parking, hotel rooms, appointments, services and scarce products.
 
-Quantum Metric's 48-versus-about-3 comparison describes abandoned retail-agent carts per completed purchase versus retail traffic overall. It does not establish that every abandoned cart reserves inventory or that agents caused an equivalent sales loss. The report combines a US/UK survey with aggregated vendor platform data; do not present it as a US-only national census.
+## Production notes
 
-The RealReal example describes ten repeatedly held listings in a reported experiment. Transaction defenses tightened while discovery remained possible. No audited lost-revenue or affected-buyer total was found for that incident.
+The full original laptop screen, pointer and taskbar are preserved. Private PayPal details receive localized blur; idle waits and the repeated round are shortened. The recorded receipt and provider identifiers describe the same real Sandbox round: $2 commitment collected, $25 booking paid, $2 commitment returned. All displayed funds are test money and the parking space is demo inventory.
 
-The original laptop screen, pointer and taskbar remain intact. Private PayPal profile/address details have localized blur. Idle waits and the repeated second round are removed. The recorded receipt and displayed provider identifiers refer to the same real Sandbox reservation: $2 commitment collected, $25 booking paid, $2 commitment returned. Test money and demo inventory are identified. No unrecorded expiry or price-change transaction is fabricated.
-
-The narration uses a stock Gemini Algieba voice. Its opening reuses the selected earlier take; the body is a continuous connected reading. Chapter cuts add no silent padding. One brief suspense beat follows “available.”
+The stock Gemini Algieba voice retains the selected suspenseful opening and original practical narration. The revised figures and closing use the same voice. Chapter transitions add no silent padding.
 
 - [The Verge: October 2026 RealReal experiment](https://www.theverge.com/report/1015811/ai-shopping-agents-blocked-amazon-the-realreal-target-meta-muse), [accessible copy](https://thevergenews.pages.dev/report/1015811/ai-shopping-agents-blocked-amazon-the-realreal-target-meta-muse/).
 - [Quantum Metric: 2026 Peak Season Benchmark](https://www.quantummetric.com/resources/2026-peak-benchmark).

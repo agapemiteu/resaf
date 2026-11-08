@@ -2,7 +2,7 @@
 
 ## Tagline
 
-PayPal-backed AI reservations. Speed shouldn't shut people out.
+PayPal-backed AI reservations. Faster agents. A fair chance for everyone.
 
 ## Inspiration
 
@@ -32,9 +32,9 @@ Real model tool calls, competing buyers, verified PayPal Sandbox capture and ref
 
 ## Opportunity
 
-Businesses and developers can apply this mechanism to parking, hotel rooms, appointments, services and scarce products. The value to test is more completed bookings and less time capacity is blocked by uncommitted requests.
+Businesses and developers can apply this mechanism to parking, hotel rooms, appointments, services and scarce products. Resaf helps businesses turn agent traffic into genuine commitment and gives another buyer a chance when an unpaid claim expires.
 
-For scale, Adobe forecasts $275.1 billion in U.S. online holiday sales for November–December 2026. For one small operator, ten otherwise-filled $25 bookings lost daily would represent $7,500 in gross booking value over 30 days. That example is illustrative, not measured loss, profit or guaranteed recovery.
+Adobe forecasts $275.1 billion in U.S. online holiday sales for November–December 2026. For a parking operator, ten additional completed $25 bookings daily could generate $7,500 in monthly booking revenue over 30 days. This projected scenario shows the opportunity for businesses and the developers building their reservation systems. Agents move faster. They shouldn't shut everyone else out.
 
 ## What's next
 
@@ -49,13 +49,13 @@ PayPal Orders and Payments, Gemini, Groq, AG Grid, Render, Cloudflare Workers, R
 - Application: https://resaf-api.onrender.com
 - Developer playground: https://resaf-api.onrender.com/developers
 - Source: https://github.com/agapemiteu/resaf
-- Video: add the public YouTube URL after uploading `docs/video-output/Resaf-PayPal-Story.mp4`.
+- Video: add the public YouTube URL after uploading `docs/video-output/Resaf-PayPal-Pitch.mp4`.
 
 ## Research
 
-- [The Verge: October 2026 experiment](https://www.theverge.com/report/1015811/ai-shopping-agents-blocked-amazon-the-realreal-target-meta-muse), [accessible copy](https://thevergenews.pages.dev/report/1015811/ai-shopping-agents-blocked-amazon-the-realreal-target-meta-muse/). Transaction defenses tightened; discovery remained possible. No audited revenue-loss figure is claimed.
-- [Adobe: 2026 U.S. holiday forecast](https://news.adobe.com/news/2026/09/adobe-us-holiday-shopping-season-to-hit-record). Market context, not Resaf revenue or an estimate of losses caused by agents.
-- [Quantum Metric: 2026 benchmark](https://www.quantummetric.com/resources/2026-peak-benchmark). The video's 48-versus-about-3 comparison measures abandoned retail carts per purchase, not proven reservation losses.
+- [The Verge: October 2026 experiment](https://www.theverge.com/report/1015811/ai-shopping-agents-blocked-amazon-the-realreal-target-meta-muse), [accessible copy](https://thevergenews.pages.dev/report/1015811/ai-shopping-agents-blocked-amazon-the-realreal-target-meta-muse/). Transaction defenses tightened; discovery remained possible.
+- [Adobe: 2026 U.S. holiday forecast](https://news.adobe.com/news/2026/09/adobe-us-holiday-shopping-season-to-hit-record). U.S. online holiday sales forecast for November–December 2026.
+- [Quantum Metric: 2026 benchmark](https://www.quantummetric.com/resources/2026-peak-benchmark). The video compares 48 abandoned retail-agent carts per purchase with about three for retail traffic overall.
 
 ## Judge walkthrough
 
@@ -70,4 +70,4 @@ PayPal approval requires a Sandbox buyer login. Provide that testing access priv
 
 ## Publishing status
 
-The application is hosted. The final local video is 2:31 and 22.81 MB. At the November 8 check, the repository was private and no public YouTube upload had been performed. Make the repository public and add the uploaded video URL before submitting. See [official rules](https://paypalaihackathon.devpost.com/rules).
+The application is hosted. The final local video is 2:42 and 24.38 MB. At the November 8 check, the repository was private and no public YouTube upload had been performed. Make the repository public and add the uploaded video URL before submitting. See [official rules](https://paypalaihackathon.devpost.com/rules).
